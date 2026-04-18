@@ -567,16 +567,34 @@
                           </p>
                         </div>
                         <div class="flex space-x-2">
-                          {# Track Episode #}
-                          <div x-data="{ trackOpen: false }">
-                            <button @click="trackOpen = true"
-                                    title="Track Episode"
-                                    class="p-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full transition duration-300 cursor-pointer">
+                          {# Quick Mark as Watched (no modal) #}
+                          <form method="post"
+                                action="{% url 'episode_save' %}?next={{ request.path }}"
+                                class="inline"
+                                title="Mark as watched">
+                            {% csrf_token %}
+                            <input type="hidden" name="media_id" value="{{ media.media_id }}">
+                            <input type="hidden" name="season_number" value="{{ media.season_number }}">
+                            <input type="hidden" name="source" value="{{ media.source }}">
+                            <input type="hidden" name="episode_number" value="{{ episode.episode_number }}">
+                            <input type="hidden" name="end_date" value="{% now "Y-m-d" %}">
+                            <button type="submit"
+                                    class="p-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full transition duration-300 cursor-pointer"
+                                    title="Mark as watched">
                               {% if episode.history %}
                                 {% include "app/icons/eye.svg" with classes="w-4 h-4" %}
                               {% else %}
                                 {% include "app/icons/eye-closed.svg" with classes="w-4 h-4" %}
                               {% endif %}
+                            </button>
+                          </form>
+
+                          {# Track Episode (with modal) #}
+                          <div x-data="{ trackOpen: false }">
+                            <button @click="trackOpen = true"
+                                    title="Track Episode"
+                                    class="p-2 bg-gray-600 hover:bg-gray-700 text-white rounded-full transition duration-300 cursor-pointer">
+                              {% include "app/icons/edit-flat.svg" with classes="w-4 h-4" %}
                             </button>
 
                             {% include "app/components/fill_track_episode.html" with request=request media=media episode=episode episode_title=episode.title csrf_token=csrf_token TRACK_TIME=TRACK_TIME only %}
