@@ -1,5 +1,6 @@
 import logging
 from datetime import timedelta
+from urllib.parse import quote
 
 import requests
 from django.conf import settings
@@ -66,6 +67,19 @@ def get_external_links(external_ids, tmdb_id=None):
         # Letterboxd will redirect to the correct movie
         # as they source their data from TMDB
         links["Letterboxd"] = f"https://www.letterboxd.com/tmdb/{tmdb_id}"
+
+    return links
+
+
+def get_streaming_links(title, media_type):
+    """Build streaming links dictionary for external streaming services."""
+    encoded_title = quote(title)
+    base_search = "https://myflixerz.to/search?q="
+
+    links = {}
+
+    if media_type in ["movie", "tv"]:
+        links["MyFlixer"] = f"{base_search}{encoded_title}"
 
     return links
 
@@ -239,9 +253,10 @@ def movie(media_id):
                     MediaTypes.MOVIE.value,
                 ),
             },
-            "external_links": get_external_links(
-                response.get("external_ids", {}), media_id
-            ),
+            "external_links": {
+                **get_external_links(response.get("external_ids", {}), media_id),
+                **get_streaming_links(response.get("title"), MediaTypes.MOVIE.value),
+            },
             "providers": response.get("watch/providers", {}).get("results", {}),
         }
 
@@ -450,7 +465,10 @@ def process_tv(response):
             ),
         },
         "tvdb_id": response.get("external_ids", {}).get("tvdb_id"),
-        "external_links": get_external_links(response.get("external_ids", {})),
+        "external_links": {
+            **get_external_links(response.get("external_ids", {})),
+            **get_streaming_links(response.get("name"), MediaTypes.TV.value),
+        },
         "last_episode_season": last_episode["season_number"] if last_episode else None,
         "next_episode_season": next_episode["season_number"] if next_episode else None,
         "providers": response.get("watch/providers", {}).get("results", {}),
