@@ -300,6 +300,27 @@ def season_details(request, source, media_id, title, season_number):  # noqa: AR
             episodes_in_db,
         )
 
+    # Find the first unwatched episode and get its verified streaming link
+    watched_episode_numbers = {
+        ep.item.episode_number
+        for ep in episodes_in_db
+        if ep.item.episode_number is not None
+    } if episodes_in_db else set()
+
+    first_unwatched = None
+    for episode in season_metadata["episodes"]:
+        if episode["episode_number"] not in watched_episode_numbers:
+            first_unwatched = episode
+            break
+
+    verified_stream = None
+    if source != Sources.MANUAL.value and first_unwatched:
+        verified_stream = tmdb.get_verified_streaming_link(
+            season_metadata["title"],
+            season_metadata["media_id"],
+            first_unwatched,
+        )
+
     # Enrich related items with user tracking data
     if season_metadata.get("related"):
         for section_name, related_items in season_metadata["related"].items():
@@ -322,6 +343,7 @@ def season_details(request, source, media_id, title, season_number):  # noqa: AR
             season_metadata.get("providers"), request.user.watch_provider_region
         ),
         "watch_provider_region": request.user.watch_provider_region,
+        "verified_stream": verified_stream,
     }
     return render(request, "app/media_details.html", context)
 

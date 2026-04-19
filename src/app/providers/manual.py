@@ -149,6 +149,7 @@ def process_episodes(season_metadata, episodes_in_db):
             "title": episode["title"],
             "overview": "No synopsis available.",
             "history": tracked_episodes.get(episode_number, []),
+            "external_links": {},
         }
         episodes_metadata.append(episode_data)
 
