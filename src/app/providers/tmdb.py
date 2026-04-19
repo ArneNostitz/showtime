@@ -70,7 +70,9 @@ def get_external_links(external_ids, tmdb_id=None):
     return links
 
 
-def get_streaming_links(title, media_type, media_id=None, episode_id=None, season_number=None, episode_number=None):
+def get_streaming_links(
+    title, media_type, media_id=None, season_number=None, episode_number=None
+):
     """Build streaming links dictionary for external streaming services."""
     links = {}
 
@@ -78,7 +80,9 @@ def get_streaming_links(title, media_type, media_id=None, episode_id=None, seaso
         show_url = myflixer.search_show(title)
         if show_url:
             if season_number and episode_number:
-                episode_url = myflixer.get_episode_url(show_url, season_number, episode_number)
+                episode_url = myflixer.get_episode_url(
+                    show_url, season_number, episode_number
+                )
                 links["MyFlixer"] = episode_url or show_url
             else:
                 links["MyFlixer"] = show_url
@@ -764,7 +768,6 @@ def process_episodes(season_metadata, episodes_in_db):
 
     for episode in season_metadata["episodes"]:
         episode_number = episode["episode_number"]
-        episode_id = episode.get("id")
 
         episodes_metadata.append(
             {
@@ -783,7 +786,6 @@ def process_episodes(season_metadata, episodes_in_db):
                     season_metadata["title"],
                     MediaTypes.TV.value,
                     media_id=season_metadata["media_id"],
-                    episode_id=episode_id,
                     season_number=season_metadata["season_number"],
                     episode_number=episode_number,
                 ),
