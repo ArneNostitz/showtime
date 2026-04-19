@@ -594,9 +594,10 @@
                           {% if episode.external_links.MyFlixer %}
                             <a href="{{ episode.external_links.MyFlixer }}"
                                target="_blank"
-                               class="p-2 bg-red-600 hover:bg-red-700 text-white rounded-full transition duration-300 cursor-pointer"
-                               title="Play on MyFlixer">
+                               class="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition duration-300 cursor-pointer"
+                               title="Watch on MyFlixer">
                               {% include "app/icons/play.svg" with classes="w-4 h-4" %}
+                              <span>Watch</span>
                             </a>
                           {% endif %}
 

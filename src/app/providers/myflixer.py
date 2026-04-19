@@ -1,4 +1,5 @@
 import logging
+import re
 from urllib.parse import quote
 
 import requests
@@ -30,7 +31,6 @@ def search_show(title):
 
     soup = BeautifulSoup(response.text, "html.parser")
 
-    # Look for the first TV show result
     film_list = soup.find("div", class_="film_list-wrap")
     if not film_list:
         return None
@@ -48,11 +48,9 @@ def search_show(title):
         if not link or not link.get("href"):
             continue
 
-        # Check if it's a TV show (href starts with /tv/)
         href = link.get("href")
         if "/tv/" in href:
             film_title = film_name.get("title", "")
-            # Check if title matches (case-insensitive partial match)
             title_lower = title.lower()
             film_title_lower = film_title.lower()
             if title_lower in film_title_lower or film_title_lower in title_lower:
@@ -61,44 +59,114 @@ def search_show(title):
     return None
 
 
-def get_episode_url(show_url, season_number, episode_number):
-    """Get the direct episode streaming URL from a show page."""
+def _extract_tmdb_id(show_url):
+    """Extract TMDB ID from show URL like https://myflixerz.to/tv/rooster-147206."""
     if not show_url:
         return None
+    match = re.search(r"-(\d+)$", show_url)
+    return match.group(1) if match else None
 
+
+def _extract_slug(show_url):
+    """Extract slug from show URL like https://myflixerz.to/tv/rooster-147206."""
+    if not show_url:
+        return None
+    match = re.search(r"/tv/([^/]+)-\d+$", show_url)
+    return match.group(1) if match else None
+
+
+def get_season_id(tmdb_id):
+    """Get the first season ID for a show via AJAX endpoint."""
     try:
         response = requests.get(
-            show_url,
+            f"{BASE_URL}/ajax/season/list/{tmdb_id}",
             headers={"User-Agent": USER_AGENT},
             timeout=10,
         )
         response.raise_for_status()
     except requests.RequestException as e:
-        logger.warning("Failed to fetch show page '%s': %s", show_url, e)
+        logger.warning("Failed to fetch season list for TMDB ID '%s': %s", tmdb_id, e)
         return None
 
     soup = BeautifulSoup(response.text, "html.parser")
+    first_season = soup.find("a", {"data-toggle": "tab"})
+    if first_season:
+        season_id = first_season.get("data-id")
+        logger.debug("Found season ID: %s for TMDB ID: %s", season_id, tmdb_id)
+        return season_id
+    return None
 
-    # Look for episode list
-    episodes_container = soup.find("div", class_="episodes")
-    if not episodes_container:
+
+def get_episode_urls_for_season(season_id):
+    """Get episode to server ID mapping for a season via AJAX endpoint.
+
+    Returns dict mapping episode_number (int) to server_id (str).
+    """
+    episode_mapping = {}
+    try:
+        response = requests.get(
+            f"{BASE_URL}/ajax/season/episodes/{season_id}",
+            headers={"User-Agent": USER_AGENT},
+            timeout=10,
+        )
+        response.raise_for_status()
+    except requests.RequestException as e:
+        logger.warning("Failed to fetch episodes for season ID '%s': %s", season_id, e)
+        return episode_mapping
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    for eps_item in soup.find_all("a", class_="eps-item"):
+        data_id = eps_item.get("data-id")
+        title = eps_item.get("title", "")
+
+        match = re.search(r"Eps\s*(\d+)", title, re.IGNORECASE)
+        if match and data_id:
+            episode_number = int(match.group(1))
+            episode_mapping[episode_number] = data_id
+
+    logger.debug("Episode mapping for season %s: %s", season_id, episode_mapping)
+    return episode_mapping
+
+
+def get_episode_url(show_url, season_number, episode_number):
+    """Get the direct episode streaming URL from a show page via AJAX.
+
+    Note: season_number is intentionally unused as episodes are fetched dynamically
+    via AJAX and matched by episode number.
+    """
+    if not show_url:
         return None
 
-    for episode_item in episodes_container.find_all("a"):
-        href = episode_item.get("href", "")
-        ep_title = episode_item.get("title", "")
+    tmdb_id = _extract_tmdb_id(show_url)
+    if not tmdb_id:
+        logger.warning("Could not extract TMDB ID from show_url: %s", show_url)
+        return show_url
 
-        # Check if this is the episode we're looking for
-        s_marker = f"s{season_number}"
-        e_marker = f"e{episode_number}"
-        if s_marker in ep_title.lower() and e_marker in ep_title.lower():
-            return f"{BASE_URL}{href}"
+    season_id = get_season_id(tmdb_id)
+    if not season_id:
+        logger.warning("Could not get season ID for TMDB ID: %s", tmdb_id)
+        return show_url
 
-        # Alternative: check href pattern for episode number
-        if f".{episode_number}" in href and e_marker in ep_title.lower():
-            return f"{BASE_URL}{href}"
+    episode_mapping = get_episode_urls_for_season(season_id)
+    episode_id = episode_mapping.get(episode_number)
 
-    return None
+    if not episode_id:
+        logger.warning(
+            "Episode %d not found in season %s mapping",
+            episode_number,
+            season_id,
+        )
+        return show_url
+
+    slug = _extract_slug(show_url)
+    if not slug:
+        logger.warning("Could not extract slug from show_url: %s", show_url)
+        return show_url
+
+    episode_url = f"{BASE_URL}/watch-tv/{slug}.{episode_id}"
+    logger.debug("Built episode URL: %s", episode_url)
+    return episode_url
 
 
 def verify_url(url):
