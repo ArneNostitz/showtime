@@ -1,6 +1,5 @@
 import logging
 from datetime import timedelta
-from urllib.parse import quote
 
 import requests
 from django.conf import settings
@@ -9,7 +8,7 @@ from django.utils import timezone
 
 from app import helpers
 from app.models import MediaTypes, Sources
-from app.providers import services
+from app.providers import myflixer, services
 
 logger = logging.getLogger(__name__)
 base_url = "https://api.themoviedb.org/3"
@@ -71,17 +70,52 @@ def get_external_links(external_ids, tmdb_id=None):
     return links
 
 
-def get_streaming_links(title, media_type):
+def get_streaming_links(title, media_type, media_id=None, episode_id=None):
     """Build streaming links dictionary for external streaming services."""
-    encoded_title = quote(title)
-    base_search = "https://myflixerz.to/search?q="
+    slug = title.lower().replace(" ", "-").replace("'", "")
+    slug = "".join(c for c in slug if c.isalnum() or c == "-")
 
     links = {}
 
-    if media_type in ["movie", "tv"]:
-        links["MyFlixer"] = f"{base_search}{encoded_title}"
+    if media_type == "movie" and media_id:
+        links["MyFlixer"] = f"https://myflixerz.to/movie/{slug}-{media_id}"
+    elif media_type == "tv" and media_id:
+        if episode_id:
+            links["MyFlixer"] = f"https://myflixerz.to/watch-tv/{slug}-{media_id}.{episode_id}"
+        else:
+            links["MyFlixer"] = f"https://myflixerz.to/tv/{slug}-{media_id}"
 
     return links
+
+
+def get_verified_streaming_link(title, media_id, first_unwatched_episode):
+    """Get verified streaming link for the first unwatched episode.
+
+    Falls back to series link if episode stream doesn't exist.
+    """
+    if not first_unwatched_episode:
+        return None
+
+    episode_id = first_unwatched_episode.get("id")
+    season_number = first_unwatched_episode.get("season_number")
+    episode_number = first_unwatched_episode.get("episode_number")
+
+    if not all([episode_id, season_number, episode_number]):
+        return get_streaming_links(title, "tv", media_id=media_id).get("MyFlixer")
+
+    slug = title.lower().replace(" ", "-").replace("'", "")
+    slug = "".join(c for c in slug if c.isalnum() or c == "-")
+
+    episode_url = f"https://myflixerz.to/watch-tv/{slug}-{media_id}.{episode_id}"
+
+    if myflixer.verify_url(episode_url):
+        return episode_url
+
+    show_url = f"https://myflixerz.to/tv/{slug}-{media_id}"
+    if myflixer.verify_url(show_url):
+        return show_url
+
+    return None
 
 
 def search(media_type, query, page):
@@ -255,7 +289,11 @@ def movie(media_id):
             },
             "external_links": {
                 **get_external_links(response.get("external_ids", {}), media_id),
-                **get_streaming_links(response.get("title"), MediaTypes.MOVIE.value),
+                **get_streaming_links(
+                    response.get("title"),
+                    MediaTypes.MOVIE.value,
+                    media_id=media_id,
+                ),
             },
             "providers": response.get("watch/providers", {}).get("results", {}),
         }
@@ -467,7 +505,11 @@ def process_tv(response):
         "tvdb_id": response.get("external_ids", {}).get("tvdb_id"),
         "external_links": {
             **get_external_links(response.get("external_ids", {})),
-            **get_streaming_links(response.get("name"), MediaTypes.TV.value),
+            **get_streaming_links(
+                response.get("name"),
+                MediaTypes.TV.value,
+                media_id=response["id"],
+            ),
         },
         "last_episode_season": last_episode["season_number"] if last_episode else None,
         "next_episode_season": next_episode["season_number"] if next_episode else None,
@@ -721,6 +763,7 @@ def process_episodes(season_metadata, episodes_in_db):
 
     for episode in season_metadata["episodes"]:
         episode_number = episode["episode_number"]
+        episode_id = episode.get("id")
 
         episodes_metadata.append(
             {
@@ -735,6 +778,12 @@ def process_episodes(season_metadata, episodes_in_db):
                 "overview": episode["overview"],
                 "history": tracked_episodes.get(episode_number, []),
                 "runtime": get_readable_duration(episode["runtime"]),
+                "external_links": get_streaming_links(
+                    season_metadata["title"],
+                    MediaTypes.TV.value,
+                    media_id=season_metadata["media_id"],
+                    episode_id=episode_id,
+                ),
             },
         )
     return episodes_metadata
