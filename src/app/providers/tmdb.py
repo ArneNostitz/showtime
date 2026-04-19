@@ -70,20 +70,22 @@ def get_external_links(external_ids, tmdb_id=None):
     return links
 
 
-def get_streaming_links(title, media_type, media_id=None, episode_id=None):
+def get_streaming_links(title, media_type, media_id=None, episode_id=None, season_number=None, episode_number=None):
     """Build streaming links dictionary for external streaming services."""
-    slug = title.lower().replace(" ", "-").replace("'", "")
-    slug = "".join(c for c in slug if c.isalnum() or c == "-")
-
     links = {}
 
-    if media_type == "movie" and media_id:
+    if media_type == "tv" and media_id:
+        show_url = myflixer.search_show(title)
+        if show_url:
+            if season_number and episode_number:
+                episode_url = myflixer.get_episode_url(show_url, season_number, episode_number)
+                links["MyFlixer"] = episode_url or show_url
+            else:
+                links["MyFlixer"] = show_url
+    elif media_type == "movie" and media_id:
+        slug = title.lower().replace(" ", "-").replace("'", "")
+        slug = "".join(c for c in slug if c.isalnum() or c == "-")
         links["MyFlixer"] = f"https://myflixerz.to/movie/{slug}-{media_id}"
-    elif media_type == "tv" and media_id:
-        if episode_id:
-            links["MyFlixer"] = f"https://myflixerz.to/watch-tv/{slug}-{media_id}.{episode_id}"
-        else:
-            links["MyFlixer"] = f"https://myflixerz.to/tv/{slug}-{media_id}"
 
     return links
 
@@ -103,15 +105,14 @@ def get_verified_streaming_link(title, media_id, first_unwatched_episode):
     if not all([episode_id, season_number, episode_number]):
         return get_streaming_links(title, "tv", media_id=media_id).get("MyFlixer")
 
-    slug = title.lower().replace(" ", "-").replace("'", "")
-    slug = "".join(c for c in slug if c.isalnum() or c == "-")
+    show_url = myflixer.search_show(title)
+    if not show_url:
+        return None
 
-    episode_url = f"https://myflixerz.to/watch-tv/{slug}-{media_id}.{episode_id}"
-
-    if myflixer.verify_url(episode_url):
+    episode_url = myflixer.get_episode_url(show_url, season_number, episode_number)
+    if episode_url and myflixer.verify_url(episode_url):
         return episode_url
 
-    show_url = f"https://myflixerz.to/tv/{slug}-{media_id}"
     if myflixer.verify_url(show_url):
         return show_url
 
@@ -783,6 +784,8 @@ def process_episodes(season_metadata, episodes_in_db):
                     MediaTypes.TV.value,
                     media_id=season_metadata["media_id"],
                     episode_id=episode_id,
+                    season_number=season_metadata["season_number"],
+                    episode_number=episode_number,
                 ),
             },
         )
