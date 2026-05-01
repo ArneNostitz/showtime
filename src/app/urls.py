@@ -87,4 +87,9 @@ urlpatterns = [
     ),
     path("statistics", views.statistics, name="statistics"),
     path("serviceworker.js", views.service_worker, name="service_worker"),
+    path(
+        "streaming-links/<int:item_id>",
+        views.edit_streaming_links,
+        name="edit_streaming_links",
+    ),
 ]
