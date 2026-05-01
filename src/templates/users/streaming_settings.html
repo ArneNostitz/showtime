@@ -1,0 +1,108 @@
+{% extends "users/base.html" %}
+
+{% block title %}
+  Streaming Settings - Yamtrack
+{% endblock title %}
+
+{% block settings_content %}
+  <div class="bg-[#2a2f35] rounded-lg p-6">
+    <div class="flex items-center mb-4">
+      {% include "app/icons/play.svg" with classes="w-6 h-6 text-indigo-400 mr-3" %}
+      <h2 class="text-xl font-semibold">Streaming Providers</h2>
+    </div>
+    <p class="text-gray-400 mb-5 text-sm">
+      Add streaming sites with their search URL templates.
+      Use <code class="text-indigo-400">{slug}</code> as placeholder for the media title.
+    </p>
+
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="space-y-4 mb-6" id="provider-list">
+        {% for provider in providers %}
+          <div class="flex gap-2 items-start">
+            <input type="text"
+                   name="provider_name"
+                   value="{{ provider.name }}"
+                   placeholder="Site name"
+                   class="flex-1 px-3 py-2 bg-[#1e2227] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500">
+            <input type="url"
+                   name="provider_url"
+                   value="{{ provider.search_url }}"
+                   placeholder="https://example.com/search/{slug}"
+                   class="flex-[2] px-3 py-2 bg-[#1e2227] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500">
+            <button type="button"
+                    class="px-3 py-2 bg-red-600/20 text-red-400 rounded-lg text-sm hover:bg-red-600/30 transition"
+                    onclick="this.parentElement.remove()">
+              Remove
+            </button>
+          </div>
+        {% endfor %}
+      </div>
+
+      <div class="flex gap-4 mb-6">
+        <button type="button"
+                class="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition"
+                onclick="addProviderRow()">
+          Add Provider
+        </button>
+      </div>
+
+      <div class="bg-[#1e2227] border border-gray-700 rounded-lg p-4 mb-6">
+        <h3 class="text-sm font-semibold text-gray-400 mb-2">Default Providers</h3>
+        <p class="text-xs text-gray-500 mb-3">Click to add a default provider to your list.</p>
+        <div class="flex flex-wrap gap-2">
+          {% for dp in default_providers %}
+            <button type="button"
+                    class="px-3 py-1.5 bg-gray-600/20 border border-gray-600/40 text-gray-400 text-xs rounded-md hover:bg-gray-600/30 transition"
+                    onclick="addDefaultProvider('{{ dp.name|escapejs }}', '{{ dp.search_url|escapejs }}')">
+              + {{ dp.name }}
+            </button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="flex gap-4">
+        <button type="submit"
+                class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition cursor-pointer text-sm">
+          Save
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    function addProviderRow() {
+      const list = document.getElementById('provider-list');
+      const div = document.createElement('div');
+      div.className = 'flex gap-2 items-start';
+      div.innerHTML = `
+        <input type="text" name="provider_name" placeholder="Site name"
+               class="flex-1 px-3 py-2 bg-[#1e2227] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500">
+        <input type="url" name="provider_url" placeholder="https://example.com/search/{slug}"
+               class="flex-[2] px-3 py-2 bg-[#1e2227] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500">
+        <button type="button" onclick="this.parentElement.remove()"
+                class="px-3 py-2 bg-red-600/20 text-red-400 rounded-lg text-sm hover:bg-red-600/30 transition">
+          Remove
+        </button>
+      `;
+      list.appendChild(div);
+    }
+    function addDefaultProvider(name, url) {
+      const list = document.getElementById('provider-list');
+      const div = document.createElement('div');
+      div.className = 'flex gap-2 items-start';
+      div.innerHTML = `
+        <input type="text" name="provider_name" value="${name}"
+               class="flex-1 px-3 py-2 bg-[#1e2227] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500">
+        <input type="url" name="provider_url" value="${url}"
+               class="flex-[2] px-3 py-2 bg-[#1e2227] border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500">
+        <button type="button" onclick="this.parentElement.remove()"
+                class="px-3 py-2 bg-red-600/20 text-red-400 rounded-lg text-sm hover:bg-red-600/30 transition">
+          Remove
+        </button>
+      `;
+      list.appendChild(div);
+    }
+  </script>
+{% endblock %}

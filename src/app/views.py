@@ -1014,6 +1014,13 @@ def edit_streaming_links(request, item_id):
         messages.success(request, "Streaming links updated.")
         return redirect(request.POST.get("return_url", request.path))
 
+    # Build search URLs for each provider
+    title_slug = slugify(item.title) or item.title
+    search_providers = [
+        {"name": p["name"], "url": p["search_url"].replace("{slug}", title_slug)}
+        for p in (request.user.streaming_providers or [])
+    ]
+
     return render(
         request,
         "app/edit_streaming_links.html",
@@ -1021,5 +1028,6 @@ def edit_streaming_links(request, item_id):
             "item": item,
             "streaming_links": item.streaming_links,
             "return_url": request.GET.get("return_url", request.path),
+            "providers": search_providers,
         },
     )

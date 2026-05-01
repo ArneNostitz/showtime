@@ -60,6 +60,13 @@
               <span>Advanced</span>
             </a>
 
+            {% url 'streaming_settings' as streaming_settings_url %}
+            <a href="{{ streaming_settings_url }}"
+               class="w-full flex items-center space-x-3 px-2 py-2 rounded-md transition-colors text-left border-l-2 cursor-pointer text-sm {% if request.path == streaming_settings_url %}bg-[#39404b] text-white border-indigo-500{% else %}text-gray-400 border-transparent hover:bg-[#313842] hover:text-white{% endif %}">
+              {% include "app/icons/play.svg" with classes="w-5 h-5" %}
+              <span>Streaming</span>
+            </a>
+
             {% url 'about' as about_url %}
             <a href="{{ about_url }}"
                class="w-full flex items-center space-x-3 px-2 py-2 rounded-md transition-colors text-left border-l-2 cursor-pointer text-sm {% if request.path == about_url %}bg-[#39404b] text-white border-indigo-500{% else %}text-gray-400 border-transparent hover:bg-[#313842] hover:text-white{% endif %}">

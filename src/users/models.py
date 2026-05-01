@@ -342,6 +342,12 @@ class User(AbstractUser):
         help_text="Region to show watch providers for",
     )
 
+    streaming_providers = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Custom streaming sites. Format: [{'name': 'Site', 'search_url': 'https://.../{slug}'}]",
+    )
+
     # Calendar preferences
     calendar_layout = models.CharField(
         max_length=20,
