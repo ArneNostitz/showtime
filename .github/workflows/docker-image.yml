@@ -88,3 +88,11 @@ jobs:
           platforms: linux/amd64,linux/arm64
           build-args: |
             VERSION=${{ steps.get-version.outputs.VERSION }}
+
+      - name: Notify deploy webhook
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          curl -s -X POST "https://cool.mynu.me/api/v1/deploy?uuid=n136ft9m5zuxcewy4evq2b52&force=false" \
+            -H "Content-Type: application/json" \
+            -d "{\"version\": \"${{ steps.get-version.outputs.VERSION }}\"}" \
+            || true
