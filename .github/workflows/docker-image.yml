@@ -94,5 +94,6 @@ jobs:
         run: |
           curl -s -X POST "https://cool.mynu.me/api/v1/deploy?uuid=n136ft9m5zuxcewy4evq2b52&force=false" \
             -H "Content-Type: application/json" \
+            -H "Authorization: Bearer 3plmMY5tgbm1ga7qED9NcOdOQGgskmXBMG3ApGaS989c2442" \
             -d "{\"version\": \"${{ steps.get-version.outputs.VERSION }}\"}" \
             || true
