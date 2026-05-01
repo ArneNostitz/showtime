@@ -575,7 +575,7 @@
           <h2 class="text-xl font-bold mb-4">Episodes</h2>
           <div class="space-y-6">
             {% for episode in media.episodes %}
-              <div class="bg-[#2a2f35] rounded-lg overflow-hidden shadow-lg {% if episode.air_date and episode.air_date > today %}opacity-50{% endif %}">
+              <div class="bg-[#2a2f35] rounded-lg overflow-hidden shadow-lg {% if episode.history %}opacity-50{% endif %}">
                 <div class="flex flex-col md:flex-row" x-data="{ obfuscated:
                   {% if user.obfuscate_unseen_episodes and not episode.history %}
                     true
