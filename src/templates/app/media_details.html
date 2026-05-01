@@ -570,11 +570,12 @@
 
       {# Episodes List #}
       {% if media.episodes %}
+        {% now "Y-m-d" as today %}
         <div class="w-full">
           <h2 class="text-xl font-bold mb-4">Episodes</h2>
           <div class="space-y-6">
             {% for episode in media.episodes %}
-              <div class="bg-[#2a2f35] rounded-lg overflow-hidden shadow-lg">
+              <div class="bg-[#2a2f35] rounded-lg overflow-hidden shadow-lg {% if episode.air_date and episode.air_date > today %}opacity-50{% endif %}">
                 <div class="flex flex-col md:flex-row" x-data="{ obfuscated:
                   {% if user.obfuscate_unseen_episodes and not episode.history %}
                     true
@@ -600,12 +601,22 @@
                         <div>
                           <h2 class="text-xl font-semibold mb-1 line-clamp-1">{{ episode.title }}</h2>
                           <p class="text-sm text-gray-400">
-                            Episode {{ episode.episode_number }} • {{ episode.air_date|default_if_none:"Unknown air date" }}
+                            Episode {{ episode.episode_number }}
+                            {% if episode.air_date and episode.air_date > today %}
+                              <span class="text-amber-400">• {{ episode.air_date }}</span>
+                            {% else %}
+                              • {{ episode.air_date|default_if_none:"Unknown air date" }}
+                            {% endif %}
                             {% if episode.runtime %}• {{ episode.runtime }}{% endif %}
                           </p>
                         </div>
                         <div class="flex space-x-2">
                           {# Track Episode #}
+                          {% if episode.air_date and episode.air_date > today %}
+                            <span class="px-3 py-1.5 text-xs text-amber-400 bg-amber-400/10 rounded-full border border-amber-400/20">
+                              Upcoming
+                            </span>
+                          {% else %}
                           <div x-data="{ trackOpen: false }">
                             <button @click="trackOpen = true"
                                     title="Track Episode"
@@ -663,6 +674,7 @@
                               </div>
                             </div>
                           </div>
+                          {% endif %}
                         </div>
                       </div>
                       <div class="{% if episode.history %}md:h-[calc(2*1.5rem)]{% else %}md:h-[calc(3*1.5rem)]{% endif %} md:overflow-y-auto px-4">
