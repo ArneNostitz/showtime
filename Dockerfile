@@ -8,28 +8,28 @@ ARG VERSION=dev
 # Set it as an environment variable
 ENV VERSION=$VERSION
 
+WORKDIR /yamtrack
+
+# System dependencies — cached until alpine or nginx version changes
+RUN apk add --no-cache nginx shadow \
+    && mkdir -p /var/log/nginx /var/lib/nginx/body \
+    && useradd -U -M -s /bin/sh abc
+
+# Python dependencies — cached until requirements.txt changes
+# BuildKit cache mount avoids re-downloading packages
 COPY ./requirements.txt /requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r /requirements.txt \
+    && pip install supervisor==4.3.0
+
+# Config files — cached until configs change
 COPY ./entrypoint.sh /entrypoint.sh
 COPY ./supervisord.conf /etc/supervisord.conf
 COPY ./nginx.conf /etc/nginx/nginx.conf
-# Generate a copy of the nginx config with IPv6 support.
-RUN sed 's/listen 8000;/listen 8000; listen [::]:8000;/' /etc/nginx/nginx.conf > /etc/nginx/nginx.ipv6.conf
+RUN sed 's/listen 8000;/listen 8000; listen [::]:8000;/' /etc/nginx/nginx.conf > /etc/nginx/nginx.ipv6.conf \
+    && chmod +x /entrypoint.sh
 
-WORKDIR /yamtrack
-
-RUN apk add --no-cache nginx shadow \
-    && pip install --no-cache-dir -r /requirements.txt \
-    && pip install --no-cache-dir supervisor==4.3.0 \
-    && rm -rf /root/.cache /tmp/* \
-    && find /usr/local -type d -name __pycache__ -exec rm -rf {} + \
-    && chmod +x /entrypoint.sh \
-    # create user abc for later PUID/PGID mapping
-    && useradd -U -M -s /bin/sh abc \
-    # Create required nginx directories and set permissions
-    && mkdir -p /var/log/nginx \
-    && mkdir -p /var/lib/nginx/body
-
-# Django app
+# Django app — changes every build, but COPY is fast
 COPY src ./
 RUN python manage.py collectstatic --noinput
 
