@@ -589,12 +589,32 @@
                     false
                   {% endif %}
                   }">
-                  <img src="{{ IMG_NONE }}"
-                       alt="E{{ episode.episode_number }}"
-                       data-src="{{ episode.image }}"
-                       class="lazyload md:w-64 md:h-40 shrink-0 {% if episode.image != IMG_NONE %}object-cover{% endif %} {% if user.obfuscate_unseen_episodes and not episode.history and episode.image != IMG_NONE %}blur cursor-pointer{% else %}cursor-default{% endif %}"
-                       :class="{ 'blur': obfuscated && hasImage, 'cursor-pointer': obfuscated && hasImage, 'cursor-default': !obfuscated || !hasImage }"
-                       @click="obfuscated = false">
+                  {% if stream_url and not episode.history and episode.air_date and episode.air_date <= today %}
+                    <a href="{{ stream_url }}"
+                       target="_blank"
+                       rel="noopener"
+                       hx-post="{% url 'episode_save' %}?next={{ request.path|urlencode }}"
+                       hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                       hx-vals='{"media_id": "{{ media.media_id }}", "season_number": "{{ media.season_number }}", "source": "{{ media.source }}", "episode_number": "{{ episode.episode_number }}", "end_date": "{% now "Y-m-d" %}"}'
+                       hx-target="body"
+                       class="block relative group">
+                      <img src="{{ IMG_NONE }}"
+                           alt="E{{ episode.episode_number }}"
+                           data-src="{{ episode.image }}"
+                           class="lazyload md:w-64 md:h-40 shrink-0 {% if episode.image != IMG_NONE %}object-cover{% endif %} group-hover:opacity-80 transition-opacity duration-200"
+                           :class="{ 'cursor-default': false }">
+                      <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        {% include "app/icons/play.svg" with classes="w-8 h-8 text-white drop-shadow-lg" %}
+                      </div>
+                    </a>
+                  {% else %}
+                    <img src="{{ IMG_NONE }}"
+                         alt="E{{ episode.episode_number }}"
+                         data-src="{{ episode.image }}"
+                         class="lazyload md:w-64 md:h-40 shrink-0 {% if episode.image != IMG_NONE %}object-cover{% endif %} {% if user.obfuscate_unseen_episodes and not episode.history and episode.image != IMG_NONE %}blur cursor-pointer{% else %}cursor-default{% endif %}"
+                         :class="{ 'blur': obfuscated && hasImage, 'cursor-pointer': obfuscated && hasImage, 'cursor-default': !obfuscated || !hasImage }"
+                         @click="obfuscated = false">
+                  {% endif %}
                   <div class="py-3 flex-1 flex flex-col">
                     <div class="flex-1">
                       <div class="flex justify-between items-start mb-2 space-x-2 px-4">
