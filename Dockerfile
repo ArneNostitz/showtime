@@ -16,10 +16,8 @@ RUN apk add --no-cache nginx shadow \
     && useradd -U -M -s /bin/sh abc
 
 # Python dependencies — cached until requirements.txt changes
-# BuildKit cache mount avoids re-downloading packages
 COPY ./requirements.txt /requirements.txt
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r /requirements.txt \
+RUN pip install -r /requirements.txt \
     && pip install supervisor==4.3.0
 
 # Config files — cached until configs change
