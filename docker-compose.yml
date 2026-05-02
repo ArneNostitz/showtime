@@ -1,7 +1,8 @@
 services:
   yamtrack:
     container_name: yamtrack
-    image: ghcr.io/ArneNostitz/showtime
+    image: ghcr.io/ArneNostitz/showtime:latest
+    pull_policy: always
     restart: unless-stopped
     depends_on:
       - redis
