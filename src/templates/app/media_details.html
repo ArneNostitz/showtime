@@ -589,7 +589,7 @@
                     false
                   {% endif %}
                   }">
-                  {% if stream_url and not episode.history and episode.air_date and episode.air_date <= today %}
+                   {% if stream_url and not episode.history and episode.air_date and episode.air_date <= today %}
                     <a href="{{ stream_url }}"
                        target="_blank"
                        rel="noopener"
@@ -597,6 +597,7 @@
                        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
                        hx-vals='{"media_id": "{{ media.media_id }}", "season_number": "{{ media.season_number }}", "source": "{{ media.source }}", "episode_number": "{{ episode.episode_number }}", "end_date": "{% now "Y-m-d" %}"}'
                        hx-target="body"
+                       hx-on:click="window.open('{{ stream_url }}', '_blank')"
                        class="block relative group">
                       <img src="{{ IMG_NONE }}"
                            alt="E{{ episode.episode_number }}"
@@ -631,7 +632,6 @@
                           </p>
                         </div>
                         <div class="flex space-x-2">
-                          {# Track Episode #}
                           {% if episode.history %}
                             <span class="px-3 py-1.5 text-xs text-green-400 bg-green-400/10 rounded-full border border-green-400/20">
                               Watched
@@ -640,7 +640,9 @@
                             <span class="px-3 py-1.5 text-xs text-amber-400 bg-amber-400/10 rounded-full border border-amber-400/20">
                               Upcoming
                             </span>
-                          {% else %}
+                          {% endif %}
+
+                          {# Track Episode #}
                           <div x-data="{ trackOpen: false }">
                             <button @click="trackOpen = true"
                                     title="Track Episode"
@@ -698,7 +700,6 @@
                               </div>
                             </div>
                           </div>
-                          {% endif %}
                         </div>
                       </div>
                       <div class="{% if episode.history %}md:h-[calc(2*1.5rem)]{% else %}md:h-[calc(3*1.5rem)]{% endif %} md:overflow-y-auto px-4">
