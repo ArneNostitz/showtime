@@ -158,7 +158,13 @@ def movie(media_id):
 
     if data is None:
         url = f"{base_url}/movie/{media_id}"
-        appends = ["recommendations", "external_ids", "credits", "watch/providers"]
+        appends = [
+            "recommendations",
+            "external_ids",
+            "credits",
+            "watch/providers",
+            "videos",
+        ]
         params = {
             **base_params,
             "append_to_response": ",".join(appends),
@@ -243,6 +249,7 @@ def movie(media_id):
                 response.get("external_ids", {}), media_id
             ),
             "providers": response.get("watch/providers", {}).get("results", {}),
+            "trailer": get_trailer(response.get("videos", {}).get("results", [])),
         }
 
         cache.set(cache_key, data)
@@ -390,7 +397,7 @@ def tv(media_id):
         url = f"{base_url}/tv/{media_id}"
         params = {
             **base_params,
-            "append_to_response": "recommendations,external_ids,watch/providers",
+            "append_to_response": "recommendations,external_ids,watch/providers,videos",
         }
 
         try:
@@ -454,6 +461,7 @@ def process_tv(response):
         "last_episode_season": last_episode["season_number"] if last_episode else None,
         "next_episode_season": next_episode["season_number"] if next_episode else None,
         "providers": response.get("watch/providers", {}).get("results", {}),
+        "trailer": get_trailer(response.get("videos", {}).get("results", [])),
     }
 
 
@@ -513,6 +521,21 @@ def get_image_url(path):
     if path:
         return f"https://image.tmdb.org/t/p/w500{path}"
     return settings.IMG_NONE
+
+
+def get_trailer(videos):
+    """Return the YouTube trailer key, preferring official trailers over teasers."""
+    if not videos:
+        return None
+
+    trailers = [v for v in videos if v.get("site") == "YouTube" and v.get("type") == "Trailer"]
+    teasers = [v for v in videos if v.get("site") == "YouTube" and v.get("type") == "Teaser"]
+
+    for candidate in trailers + teasers:
+        if key := candidate.get("key"):
+            return key
+
+    return None
 
 
 def get_title(response):
