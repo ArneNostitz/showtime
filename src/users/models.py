@@ -291,6 +291,11 @@ class User(AbstractUser):
         help_text="Hide hover overlay on touch devices",
     )
 
+    obfuscate_unseen_episodes = models.BooleanField(
+        default=False,
+        help_text="Blur unseen episode images and descriptions",
+    )
+
     # Tracking settings
     quick_watch_date = models.CharField(
         max_length=20,
@@ -335,6 +340,12 @@ class User(AbstractUser):
         max_length=5,
         default="UNSET",
         help_text="Region to show watch providers for",
+    )
+
+    streaming_providers = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Custom streaming sites. Format: [{'name': 'Site', 'search_url': 'https://.../{slug}'}]",
     )
 
     # Calendar preferences

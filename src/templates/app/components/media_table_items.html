@@ -1,7 +1,7 @@
 {% load app_tags %}
 
 {% for media in media_list %}
-  <tr class="hover:bg-[#39404b] transition-colors cursor-pointer hover-tap"
+  <tr class="hover:bg-[#39404b] transition-colors cursor-pointer hover-tap {% if media.status == Status.COMPLETED.value %}opacity-50{% endif %}"
       x-data="{ trackOpen: false }"
       {% if forloop.last and media_list.has_next %} hx-get="{% url 'medialist' media_type %}?page={{ media_list.next_page_number }}" hx-trigger="revealed threshold:200px" hx-swap="afterend" hx-include="#filter-form" hx-indicator="#loading-indicator" {% endif %}>
     <td class="p-2 relative">
@@ -9,12 +9,20 @@
            class="lazyload min-w-10 w-10 h-10 object-cover rounded-md parent-hover-tap:hidden"
            data-src="{{ media.item.image }}"
            src="{{ IMG_NONE }}">
-      <button class="w-10 h-10 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md transition-colors items-center justify-center hidden cursor-pointer parent-hover-tap:flex"
+      <div class="w-10 h-10 items-center justify-center hidden gap-1 cursor-pointer parent-hover-tap:flex">
+        {% if media.stream_url %}
+          <a href="{{ media.stream_url }}"
+             target="_blank"
+             class="w-10 h-10 bg-red-600 hover:bg-red-500 text-white rounded-md transition-colors flex items-center justify-center"
+             title="Watch on streaming">{% include "app/icons/play.svg" with classes="w-4 h-4" %}</a>
+        {% endif %}
+        <button class="w-10 h-10 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md transition-colors flex items-center justify-center"
               hx-get="{% media_view_url 'track_modal' media.item %}"
               hx-vals='{"return_url": "{{ request.get_full_path|urlencode }}", "instance_id": "{{ media.id }}"}'
               hx-target="#{% component_id 'track' media.item media.id %}"
               hx-trigger="click once"
               @click="trackOpen = true">{% include "app/icons/edit.svg" with classes="w-4 h-4" %}</button>
+      </div>
 
       {# Track Modal #}
       <div x-show="trackOpen"

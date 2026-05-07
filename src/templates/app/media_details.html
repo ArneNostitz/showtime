@@ -16,6 +16,30 @@
            class="w-full rounded-lg shadow-lg bg-[#2a2f35] object-cover"
            src="{{ media.image }}">
 
+      {% if stream_url %}
+        <div class="mt-3 flex gap-1">
+          <a href="{{ stream_url }}"
+             target="_blank"
+             class="flex-1 px-3 py-2 rounded-lg flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white text-sm transition duration-300 cursor-pointer">
+            {% include "app/icons/play.svg" with classes="w-4 h-4" %}
+            <span>Watch</span>
+          </a>
+          {% if current_instance %}
+            <a href="{% url 'edit_streaming_links' current_instance.item.id %}?return_url={{ request.get_full_path|urlencode }}"
+               class="px-3 py-2 rounded-lg bg-gray-600 hover:bg-gray-500 text-white text-sm transition duration-300 cursor-pointer flex items-center justify-center"
+               title="Edit streaming links">
+              {% include "app/icons/edit.svg" with classes="w-4 h-4" %}
+            </a>
+          {% endif %}
+        </div>
+      {% elif current_instance %}
+        <a href="{% url 'edit_streaming_links' current_instance.item.id %}?return_url={{ request.get_full_path|urlencode }}"
+           class="mt-3 px-3 py-2 rounded-lg w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white text-sm transition duration-300 cursor-pointer">
+          {% include "app/icons/edit.svg" with classes="w-4 h-4" %}
+          <span>Add Link</span>
+        </a>
+      {% endif %}
+
       <div x-data="{ trackOpen: false }">
         <button class="mt-4 p-3 rounded-lg w-full flex items-center text-white transition duration-300 cursor-pointer {% if user_medias %}bg-indigo-600 hover:bg-indigo-700{% else %}bg-gray-600 hover:bg-gray-700{% endif %}"
                 hx-get="{% media_view_url 'track_modal' media %}"
@@ -514,7 +538,7 @@
             </div>
           {% endfor %}
           <div>
-            <h3 class="text-sm font-semibold text-gray-400">Source</h3>
+            <h3 class="text-sm font-semibold text-gray-400">SOURCE</h3>
             <a href="{{ media.source_url }}"
                class="text-gray-200 hover:text-indigo-500 transition-colors duration-200"
                target="_blank">{{ media.source|source_readable }}</a>
@@ -587,27 +611,78 @@
 
       {# Episodes List #}
       {% if media.episodes %}
+        {% now "Y-m-d" as today %}
         <div class="w-full">
           <h2 class="text-xl font-bold mb-4">Episodes</h2>
           <div class="space-y-6">
             {% for episode in media.episodes %}
-              <div class="bg-[#2a2f35] rounded-lg overflow-hidden shadow-lg">
-                <div class="flex flex-col md:flex-row">
-                  <img src="{{ IMG_NONE }}"
-                       alt="E{{ episode.episode_number }}"
-                       data-src="{{ episode.image }}"
-                       class="lazyload md:w-64 md:h-40 shrink-0 {% if episode.image != IMG_NONE %}object-cover{% endif %}">
+              <div class="bg-[#2a2f35] rounded-lg overflow-hidden shadow-lg {% if episode.history %}opacity-40{% endif %}">
+                <div class="flex flex-col md:flex-row" x-data="{ obfuscated:
+                  {% if user.obfuscate_unseen_episodes and not episode.history %}
+                    true
+                  {% else %}
+                    false
+                  {% endif %}
+                  , hasImage:
+                  {% if episode.image != IMG_NONE %}
+                    true
+                  {% else %}
+                    false
+                  {% endif %}
+                  }">
+                   {% if stream_url and not episode.history and episode.air_date and episode.air_date <= today %}
+                    <a href="{{ stream_url }}"
+                       target="_blank"
+                       rel="noopener"
+                       hx-post="{% url 'episode_save' %}?next={{ request.path|urlencode }}"
+                       hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                       hx-vals='{"media_id": "{{ media.media_id }}", "season_number": "{{ media.season_number }}", "source": "{{ media.source }}", "episode_number": "{{ episode.episode_number }}", "end_date": "{% now "Y-m-d" %}"}'
+                       hx-target="body"
+                       hx-on:click="window.open('{{ stream_url }}', '_blank')"
+                       class="block relative group">
+                      <img src="{{ IMG_NONE }}"
+                           alt="E{{ episode.episode_number }}"
+                           data-src="{{ episode.image }}"
+                           class="lazyload md:w-64 md:h-40 shrink-0 {% if episode.image != IMG_NONE %}object-cover{% endif %} group-hover:opacity-80 transition-opacity duration-200"
+                           :class="{ 'cursor-default': false }">
+                      <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        {% include "app/icons/play.svg" with classes="w-8 h-8 text-white drop-shadow-lg" %}
+                      </div>
+                    </a>
+                  {% else %}
+                    <img src="{{ IMG_NONE }}"
+                         alt="E{{ episode.episode_number }}"
+                         data-src="{{ episode.image }}"
+                         class="lazyload md:w-64 md:h-40 shrink-0 {% if episode.image != IMG_NONE %}object-cover{% endif %} {% if user.obfuscate_unseen_episodes and not episode.history and episode.image != IMG_NONE %}blur cursor-pointer{% else %}cursor-default{% endif %}"
+                         :class="{ 'blur': obfuscated && hasImage, 'cursor-pointer': obfuscated && hasImage, 'cursor-default': !obfuscated || !hasImage }"
+                         @click="obfuscated = false">
+                  {% endif %}
                   <div class="py-3 flex-1 flex flex-col">
                     <div class="flex-1">
                       <div class="flex justify-between items-start mb-2 space-x-2 px-4">
                         <div>
                           <h2 class="text-xl font-semibold mb-1 line-clamp-1">{{ episode.title }}</h2>
                           <p class="text-sm text-gray-400">
-                            Episode {{ episode.episode_number }} • {{ episode.air_date|default_if_none:"Unknown air date" }}
+                            Episode {{ episode.episode_number }}
+                            {% if episode.air_date and episode.air_date > today %}
+                              <span class="text-amber-400">• {{ episode.air_date }}</span>
+                            {% else %}
+                              • {{ episode.air_date|default_if_none:"Unknown air date" }}
+                            {% endif %}
                             {% if episode.runtime %}• {{ episode.runtime }}{% endif %}
                           </p>
                         </div>
                         <div class="flex space-x-2">
+                          {% if episode.history %}
+                            <span class="px-3 py-1.5 text-xs text-green-400 bg-green-400/10 rounded-full border border-green-400/20">
+                              Watched
+                            </span>
+                          {% elif episode.air_date and episode.air_date > today %}
+                            <span class="px-3 py-1.5 text-xs text-amber-400 bg-amber-400/10 rounded-full border border-amber-400/20">
+                              Upcoming
+                            </span>
+                          {% endif %}
+
                           {# Track Episode #}
                           <div x-data="{ trackOpen: false }">
                             <button @click="trackOpen = true"
@@ -669,7 +744,9 @@
                         </div>
                       </div>
                       <div class="{% if episode.history %}md:h-[calc(2*1.5rem)]{% else %}md:h-[calc(3*1.5rem)]{% endif %} md:overflow-y-auto px-4">
-                        <p class="text-sm text-gray-300 leading-relaxed text-pretty">{{ episode.overview }}</p>
+                        <p class="text-sm text-gray-300 leading-relaxed text-pretty {% if user.obfuscate_unseen_episodes and not episode.history %}blur cursor-pointer{% else %}cursor-text{% endif %}"
+                           :class="{ 'blur': obfuscated, 'cursor-pointer': obfuscated, 'cursor-text': !obfuscated }"
+                           @click="obfuscated = false">{{ episode.overview }}</p>
                       </div>
                     </div>
                     {% if episode.history %}

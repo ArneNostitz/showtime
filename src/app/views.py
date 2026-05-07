@@ -9,7 +9,7 @@ from django.core.paginator import Paginator
 from django.db import IntegrityError
 from django.db.models import prefetch_related_objects
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -22,9 +22,16 @@ from app import statistics as stats
 from app.forms import EpisodeForm, ManualItemForm, get_form_class
 from app.models import (
     TV,
+    Anime,
     BasicMedia,
+    BoardGame,
+    Book,
+    Comic,
+    Game,
     Item,
+    Manga,
     MediaTypes,
+    Movie,
     Season,
     Sources,
     Status,
@@ -35,6 +42,20 @@ from app.templatetags import app_tags
 from users.models import HomeSortChoices, MediaSortChoices, MediaStatusChoices
 
 logger = logging.getLogger(__name__)
+
+
+def _enrich_stream_url(media):
+    """Set stream_url attribute from item.streaming_links if available."""
+    item = media.item
+    links = item.streaming_links
+    media.stream_url = next(iter(links.values())) if links else None
+
+
+def _get_stream_url(current_instance):
+    """Extract first streaming URL from instance, or None."""
+    if current_instance and current_instance.item.streaming_links:
+        return next(iter(current_instance.item.streaming_links.values()))
+    return None
 
 
 @require_GET
@@ -54,8 +75,12 @@ def home(request):
             items_limit=items_limit,
             specific_media_type=media_type_to_load,
         )
+        media_list = list_by_type.get(media_type_to_load, [])
+        if media_list.get("items"):
+            for media in media_list["items"]:
+                _enrich_stream_url(media)
         context = {
-            "media_list": list_by_type.get(media_type_to_load, []),
+            "media_list": media_list,
             "home_status": status_to_load,
         }
         return render(request, "app/components/home_grid.html", context)
@@ -68,6 +93,10 @@ def home(request):
             sort_by=sort_by,
             items_limit=items_limit,
         )
+        for media_list in media_types.values():
+            if media_list.get("items"):
+                for media in media_list["items"]:
+                    _enrich_stream_url(media)
         home_sections.append(
             {
                 "key": status,
@@ -159,6 +188,9 @@ def media_list(request, media_type):
         media_page.object_list,
         media_type,
     )
+
+    for media in media_page.object_list:
+        _enrich_stream_url(media)
 
     context = {
         "media_type": media_type,
@@ -263,6 +295,7 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
         "current_instance": current_instance,
         "watch_providers": watch_providers,
         "watch_provider_region": request.user.watch_provider_region,
+        "stream_url": _get_stream_url(current_instance),
     }
     return render(request, "app/media_details.html", context)
 
@@ -322,6 +355,7 @@ def season_details(request, source, media_id, title, season_number):  # noqa: AR
             season_metadata.get("providers"), request.user.watch_provider_region
         ),
         "watch_provider_region": request.user.watch_provider_region,
+        "stream_url": _get_stream_url(current_instance),
     }
     return render(request, "app/media_details.html", context)
 
@@ -985,3 +1019,53 @@ def service_worker():
         response = HttpResponse(f.read(), content_type="application/javascript")
         response["Service-Worker-Allowed"] = "/"
         return response
+
+
+@require_http_methods(["GET", "POST"])
+def edit_streaming_links(request, item_id):
+    """Edit streaming links for a media item."""
+    item = get_object_or_404(Item, id=item_id)
+
+    media_models = [
+        BasicMedia, TV, Season, Movie, Anime,
+        Book, Game, Comic, BoardGame, Manga,
+    ]
+    user_media = None
+    for model_cls in media_models:
+        user_media = model_cls.objects.filter(user=request.user, item=item).first()
+        if user_media:
+            break
+
+    if not user_media:
+        return HttpResponseBadRequest("You don't have this item in your library.")
+
+    if request.method == "POST":
+        links = {}
+        for key, value in request.POST.items():
+            if key.startswith("stream_") and value.strip():
+                provider = key.replace("stream_", "").replace("_", " ").title()
+                links[provider] = value.strip()
+
+        item.streaming_links = links
+        item.save(update_fields=["streaming_links"])
+
+        messages.success(request, "Streaming links updated.")
+        return redirect(request.POST.get("return_url", request.path))
+
+    # Build search URLs for each provider
+    title_slug = slugify(item.title) or item.title
+    search_providers = [
+        {"name": p["name"], "url": p["search_url"].replace("{slug}", title_slug)}
+        for p in (request.user.streaming_providers or [])
+    ]
+
+    return render(
+        request,
+        "app/edit_streaming_links.html",
+        {
+            "item": item,
+            "streaming_links": item.streaming_links,
+            "return_url": request.GET.get("return_url", request.path),
+            "providers": search_providers,
+        },
+    )

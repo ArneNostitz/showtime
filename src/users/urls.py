@@ -31,6 +31,11 @@ urlpatterns = [
     path("regenerate_token", views.regenerate_token, name="regenerate_token"),
     path("clear_search_cache", views.clear_search_cache, name="clear_search_cache"),
     path(
+        "settings/streaming",
+        views.streaming_settings,
+        name="streaming_settings",
+    ),
+    path(
         "update_plex_usernames",
         views.update_plex_usernames,
         name="update_plex_usernames",

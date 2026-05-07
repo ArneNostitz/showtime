@@ -82,6 +82,11 @@ class Item(CalendarTriggerMixin, models.Model):
     image = models.URLField()  # if add default, custom media entry will show the value
     season_number = models.PositiveIntegerField(null=True, blank=True)
     episode_number = models.PositiveIntegerField(null=True, blank=True)
+    streaming_links = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="User-managed streaming URLs. Format: {'Provider': 'https://...'}",
+    )
 
     class Meta:
         """Meta options for the model."""

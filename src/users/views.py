@@ -236,6 +236,7 @@ def preferences(request):
 
     # Process form submission
     request.user.clickable_media_cards = "clickable_media_cards" in request.POST
+    request.user.obfuscate_unseen_episodes = "obfuscate_unseen_episodes" in request.POST
     request.user.quick_watch_date = request.POST.get(
         "quick_watch_date",
         QuickWatchDateChoices.CURRENT_DATE,
@@ -374,3 +375,36 @@ def clear_search_cache(request):
     )
 
     return redirect("advanced")
+
+
+@require_http_methods(["GET", "POST"])
+def streaming_settings(request):
+    """Manage custom streaming provider search URLs."""
+    providers = request.user.streaming_providers or []
+
+    if request.method == "POST":
+        providers = []
+        names = request.POST.getlist("provider_name")
+        urls = request.POST.getlist("provider_url")
+        for raw_name, raw_url in zip(names, urls, strict=False):
+            name = raw_name.strip()
+            url = raw_url.strip()
+            if name and url:
+                providers.append({"name": name, "search_url": url})
+
+        request.user.streaming_providers = providers
+        request.user.save(update_fields=["streaming_providers"])
+        messages.success(request, "Streaming providers updated.")
+        return redirect("streaming_settings")
+
+    return render(
+        request,
+        "users/streaming_settings.html",
+        {
+            "providers": providers,
+            "default_providers": [
+                {"name": "M4uFree", "search_url": "https://ww4.m4ufree.lat/search/{slug}"},
+                {"name": "NowWatching", "search_url": "https://nowwatching.tv/search?q={slug}"},
+            ],
+        },
+    )
