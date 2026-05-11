@@ -384,6 +384,7 @@ def streaming_settings(request):
     providers = request.user.streaming_providers or []
 
     if request.method == "POST":
+        request.user.vsembed_enabled = "vsembed_enabled" in request.POST
         providers = []
         names = request.POST.getlist("provider_name")
         urls = request.POST.getlist("provider_url")

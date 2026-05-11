@@ -18,6 +18,31 @@
     <form method="post">
       {% csrf_token %}
 
+      {# VsEmbed Streaming #}
+      <div class="mb-8">
+        <div class="flex items-center justify-between p-4 bg-[#1e2227] border border-gray-700 rounded-lg">
+          <div class="flex-1">
+            <div class="flex items-center text-gray-200 mb-1">
+              {% include "app/icons/play.svg" with classes="w-5 h-5 mr-2 text-indigo-400" %}
+              <span class="text-sm font-semibold">Enable VsEmbed Streaming</span>
+            </div>
+            <p class="text-xs text-gray-400">
+              Automatically generate VsEmbed streaming links using IMDb IDs for movies, TV episodes, and seasons.
+            </p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer ml-4">
+            <input class="sr-only peer"
+                   type="checkbox"
+                   name="vsembed_enabled"
+                   {% if user.vsembed_enabled %}checked{% endif %}>
+            <div class="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <h3 class="text-sm font-semibold text-gray-400 mb-4 uppercase tracking-wider">Custom Search Providers</h3>
+
       <div class="space-y-4 mb-6" id="provider-list">
         {% for provider in providers %}
           <div class="flex gap-2 items-start">
