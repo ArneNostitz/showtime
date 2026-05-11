@@ -16,24 +16,7 @@
            class="w-full rounded-lg shadow-lg bg-[#2a2f35] object-cover"
            src="{{ media.image }}">
 
-      {% if vsembed_enabled and vsembed_url %}
-        <div class="mt-3 flex gap-1">
-          <a href="{{ vsembed_url }}"
-             target="_blank"
-             rel="noopener"
-             class="flex-1 px-3 py-2 rounded-lg flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white text-sm transition duration-300 cursor-pointer">
-            {% include "app/icons/play.svg" with classes="w-4 h-4" %}
-            <span>Watch</span>
-          </a>
-          {% if current_instance %}
-            <a href="{% url 'edit_streaming_links' current_instance.item.id %}?return_url={{ request.get_full_path|urlencode }}"
-               class="px-3 py-2 rounded-lg bg-gray-600 hover:bg-gray-500 text-white text-sm transition duration-300 cursor-pointer flex items-center justify-center"
-               title="Edit streaming links">
-              {% include "app/icons/edit.svg" with classes="w-4 h-4" %}
-            </a>
-          {% endif %}
-        </div>
-      {% elif stream_url %}
+      {% if stream_url %}
         <div class="mt-3 flex gap-1">
           <a href="{{ stream_url }}"
              target="_blank"
@@ -517,7 +500,7 @@
 
       {# Media Details #}
       <h2 class="text-xl font-bold mb-4">Details</h2>
-      {% if watch_provider_region == "UNSET" or watch_providers is not None %}
+      {% if watch_provider_region == "UNSET" or watch_providers or search_providers or vsembed_url %}
         <div class="bg-[#2a2f35] p-4 rounded-lg my-4">
           <h3 class="text-sm font-semibold text-gray-400 mb-2">STREAMING</h3>
           {% if watch_provider_region == "UNSET" %}
@@ -527,8 +510,10 @@
               <a href="{{ preferences_url }}"
                  class="hover:text-indigo-500 hover:underline">preferences</a>.
             </p>
-          {% elif watch_providers %}
-            <div class="grid grid-cols-[repeat(auto-fill,48px)] gap-2 items-center justify-between">
+          {% endif %}
+
+          {% if watch_providers %}
+            <div class="grid grid-cols-[repeat(auto-fill,48px)] gap-2 items-center justify-between {% if search_providers or vsembed_url %}mb-4{% endif %}">
               {% for provider in watch_providers %}
                 <img class="rounded-md"
                      src="{{ provider.image }}"
@@ -536,7 +521,37 @@
                      alt="{{ provider.provider_name }}" />
               {% endfor %}
             </div>
-          {% else %}
+          {% endif %}
+
+          {% if search_providers or vsembed_url %}
+            <div class="flex flex-col gap-2">
+              {% if vsembed_enabled and vsembed_url %}
+                <a href="{{ vsembed_url }}"
+                   target="_blank"
+                   rel="noopener"
+                   class="flex items-center gap-2 text-sm text-gray-200 hover:text-indigo-400 transition group">
+                  <div class="p-1 bg-red-600/20 rounded">
+                    {% include "app/icons/play.svg" with classes="w-3.5 h-3.5 text-red-500" %}
+                  </div>
+                  <span>Watch on VsEmbed</span>
+                </a>
+              {% endif %}
+
+              {% for provider in search_providers %}
+                <a href="{{ provider.url }}"
+                   target="_blank"
+                   rel="noopener"
+                   class="flex items-center gap-2 text-sm text-gray-200 hover:text-indigo-400 transition group">
+                  <div class="p-1 bg-gray-600/20 rounded">
+                    {% include "app/icons/magnifying-glass.svg" with classes="w-3.5 h-3.5 text-gray-400" %}
+                  </div>
+                  <span>Search on {{ provider.name }}</span>
+                </a>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          {% if not watch_providers and not search_providers and not vsembed_url and watch_provider_region != "UNSET" %}
             <p class="text-gray-200">No watch providers</p>
           {% endif %}
         </div>

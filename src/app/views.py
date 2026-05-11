@@ -1,4 +1,5 @@
 import logging
+import re
 from pathlib import Path
 
 from django.apps import apps
@@ -268,6 +269,24 @@ def media_search(request):
     return render(request, "app/search.html", context)
 
 
+def _extract_imdb_id(media_metadata):
+    """Extract IMDb ID from metadata, checking external links as fallback."""
+    imdb_id = media_metadata.get("imdb_id")
+    if imdb_id:
+        return imdb_id
+
+    # Fallback to external links
+    external_links = media_metadata.get("external_links", {})
+    imdb_url = external_links.get("IMDb")
+    if imdb_url:
+        # Match tt followed by digits
+        match = re.search(r"(tt\d+)", imdb_url)
+        if match:
+            return match.group(1)
+
+    return None
+
+
 @require_GET
 def media_details(request, source, media_type, media_id, title):  # noqa: ARG001 title for URL
     """Return the details page for a media item."""
@@ -297,6 +316,9 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
     else:
         watch_providers = None
 
+    imdb_id = _extract_imdb_id(media_metadata)
+    title_slug = slugify(media_metadata.get("title", "")) or media_metadata.get("title", "")
+
     context = {
         "media": media_metadata,
         "media_type": media_type,
@@ -305,9 +327,13 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
         "watch_providers": watch_providers,
         "watch_provider_region": request.user.watch_provider_region,
         "stream_url": _get_stream_url(current_instance),
-        "imdb_id": media_metadata.get("imdb_id"),
+        "imdb_id": imdb_id,
         "vsembed_enabled": request.user.vsembed_enabled,
-        "vsembed_url": _build_vsembed_url(media_metadata.get("imdb_id"), media_type),
+        "vsembed_url": _build_vsembed_url(imdb_id, media_type),
+        "search_providers": [
+            {"name": p["name"], "url": p["search_url"].replace("{slug}", title_slug)}
+            for p in (request.user.streaming_providers or [])
+        ],
     }
     return render(request, "app/media_details.html", context)
 
@@ -357,6 +383,9 @@ def season_details(request, source, media_id, title, season_number):  # noqa: AR
                     )
                 )
 
+    imdb_id = _extract_imdb_id(tv_with_seasons_metadata)
+    title_slug = slugify(tv_with_seasons_metadata.get("title", "")) or tv_with_seasons_metadata.get("title", "")
+
     context = {
         "media": season_metadata,
         "tv": tv_with_seasons_metadata,
@@ -368,9 +397,13 @@ def season_details(request, source, media_id, title, season_number):  # noqa: AR
         ),
         "watch_provider_region": request.user.watch_provider_region,
         "stream_url": _get_stream_url(current_instance),
-        "imdb_id": tv_with_seasons_metadata.get("imdb_id"),
+        "imdb_id": imdb_id,
         "vsembed_enabled": request.user.vsembed_enabled,
-        "vsembed_url": _build_vsembed_url(tv_with_seasons_metadata.get("imdb_id"), MediaTypes.TV.value),
+        "vsembed_url": _build_vsembed_url(imdb_id, MediaTypes.TV.value),
+        "search_providers": [
+            {"name": p["name"], "url": p["search_url"].replace("{slug}", title_slug)}
+            for p in (request.user.streaming_providers or [])
+        ],
     }
     return render(request, "app/media_details.html", context)
 
