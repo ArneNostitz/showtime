@@ -58,6 +58,15 @@ def _get_stream_url(current_instance):
     return None
 
 
+def _build_vsembed_url(imdb_id, media_type):
+    """Build a vsembed.ru streaming URL from an IMDb ID."""
+    if not imdb_id:
+        return None
+    if media_type == MediaTypes.MOVIE.value:
+        return f"https://vsembed.ru/embed/movie?imdb={imdb_id}"
+    return f"https://vsembed.ru/embed/tv?imdb={imdb_id}"
+
+
 @require_GET
 def home(request):
     """Home page with media items in progress and planning."""
@@ -296,6 +305,9 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
         "watch_providers": watch_providers,
         "watch_provider_region": request.user.watch_provider_region,
         "stream_url": _get_stream_url(current_instance),
+        "imdb_id": media_metadata.get("imdb_id"),
+        "vsembed_enabled": request.user.vsembed_enabled,
+        "vsembed_url": _build_vsembed_url(media_metadata.get("imdb_id"), media_type),
     }
     return render(request, "app/media_details.html", context)
 
@@ -356,6 +368,9 @@ def season_details(request, source, media_id, title, season_number):  # noqa: AR
         ),
         "watch_provider_region": request.user.watch_provider_region,
         "stream_url": _get_stream_url(current_instance),
+        "imdb_id": tv_with_seasons_metadata.get("imdb_id"),
+        "vsembed_enabled": request.user.vsembed_enabled,
+        "vsembed_url": _build_vsembed_url(tv_with_seasons_metadata.get("imdb_id"), MediaTypes.TV.value),
     }
     return render(request, "app/media_details.html", context)
 

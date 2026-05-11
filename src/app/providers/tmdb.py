@@ -245,6 +245,7 @@ def movie(media_id):
                     MediaTypes.MOVIE.value,
                 ),
             },
+            "imdb_id": response.get("external_ids", {}).get("imdb_id"),
             "external_links": get_external_links(
                 response.get("external_ids", {}), media_id
             ),
@@ -283,6 +284,7 @@ def enrich_season_with_tv_data(season_data, tv_data, media_id, season_number):
     )
     season_data["title"] = tv_data["title"]
     season_data["tvdb_id"] = tv_data["tvdb_id"]
+    season_data["imdb_id"] = tv_data["imdb_id"]
     season_data["external_links"] = tv_data["external_links"]
     season_data["genres"] = tv_data["genres"]
     if season_data["synopsis"] == "No synopsis available.":
@@ -457,6 +459,7 @@ def process_tv(response):
             ),
         },
         "tvdb_id": response.get("external_ids", {}).get("tvdb_id"),
+        "imdb_id": response.get("external_ids", {}).get("imdb_id"),
         "external_links": get_external_links(response.get("external_ids", {})),
         "last_episode_season": last_episode["season_number"] if last_episode else None,
         "next_episode_season": next_episode["season_number"] if next_episode else None,

@@ -348,6 +348,11 @@ class User(AbstractUser):
         help_text="Custom streaming sites. Format: [{'name': 'Site', 'search_url': 'https://.../{slug}'}]",
     )
 
+    vsembed_enabled = models.BooleanField(
+        default=False,
+        help_text="Enable VsEmbed streaming links using IMDb IDs",
+    )
+
     # Calendar preferences
     calendar_layout = models.CharField(
         max_length=20,

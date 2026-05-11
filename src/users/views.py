@@ -246,6 +246,7 @@ def preferences(request):
         "hide_completed_recommendations" in request.POST
     )
     request.user.hide_zero_rating = "hide_zero_rating" in request.POST
+    request.user.vsembed_enabled = "vsembed_enabled" in request.POST
     request.user.date_format = request.POST.get(
         "date_format",
         DateFormatChoices.ISO,
