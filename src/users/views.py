@@ -246,7 +246,6 @@ def preferences(request):
         "hide_completed_recommendations" in request.POST
     )
     request.user.hide_zero_rating = "hide_zero_rating" in request.POST
-    request.user.vsembed_enabled = "vsembed_enabled" in request.POST
     request.user.date_format = request.POST.get(
         "date_format",
         DateFormatChoices.ISO,
@@ -395,7 +394,7 @@ def streaming_settings(request):
                 providers.append({"name": name, "search_url": url})
 
         request.user.streaming_providers = providers
-        request.user.save(update_fields=["streaming_providers"])
+        request.user.save()
         messages.success(request, "Streaming providers updated.")
         return redirect("streaming_settings")
 
