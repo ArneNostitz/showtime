@@ -679,8 +679,8 @@
                          hx-vals='{"media_id": "{{ media.media_id }}", "season_number": "{{ media.season_number }}", "source": "{{ media.source }}", "episode_number": "{{ episode.episode_number }}", "end_date": "{% now "Y-m-d" %}"}'
                          hx-target="body"
                          hx-on:click="window.open('{{ vsembed_url }}&season={{ media.season_number }}&episode={{ episode.episode_number }}', '_blank')"
-                         class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                        {% include "app/icons/play.svg" with classes="w-8 h-8 text-white drop-shadow-lg" %}
+                         class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/30">
+                        {% include "app/icons/play.svg" with classes="w-10 h-10 text-white drop-shadow-lg" %}
                       </a>
                     {% elif stream_url and not episode.history and episode.air_date and episode.air_date <= today %}
                       <a href="{{ stream_url }}"
@@ -691,8 +691,8 @@
                          hx-vals='{"media_id": "{{ media.media_id }}", "season_number": "{{ media.season_number }}", "source": "{{ media.source }}", "episode_number": "{{ episode.episode_number }}", "end_date": "{% now "Y-m-d" %}"}'
                          hx-target="body"
                          hx-on:click="window.open('{{ stream_url }}', '_blank')"
-                         class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                        {% include "app/icons/play.svg" with classes="w-8 h-8 text-white drop-shadow-lg" %}
+                         class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/30">
+                        {% include "app/icons/play.svg" with classes="w-10 h-10 text-white drop-shadow-lg" %}
                       </a>
                     {% endif %}
                   </div>
