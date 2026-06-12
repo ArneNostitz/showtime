@@ -698,6 +698,11 @@ def media_save_planning(request):
     )
     instance.save()
 
+    if request.headers.get("HX-Request"):
+        next_url = request.GET.get("next", "/")
+        response = HttpResponse()
+        response["HX-Redirect"] = next_url
+        return response
     return helpers.redirect_back(request)
 
 
