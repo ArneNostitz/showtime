@@ -257,13 +257,14 @@ class SavePlanningMedia(TestCase):
     """Tests for the media_save_planning quick-add view."""
 
     def setUp(self):
+        """Create a user and log in."""
         self.credentials = {"username": "test", "password": "12345"}
         self.user = get_user_model().objects.create_user(**self.credentials)
         self.client.login(**self.credentials)
 
     @patch("app.providers.services.get_media_metadata")
     def test_htmx_request_returns_hx_redirect(self, mock_get_metadata):
-        """htmx POST should respond with HX-Redirect, not a 302, so the browser navigates."""
+        """HTMX POST must return HX-Redirect (not 302) so the browser navigates."""
         mock_get_metadata.return_value = {
             "title": "Test Movie",
             "image": "http://example.com/image.jpg",
@@ -291,7 +292,7 @@ class SavePlanningMedia(TestCase):
 
     @patch("app.providers.services.get_media_metadata")
     def test_non_htmx_request_returns_redirect(self, mock_get_metadata):
-        """Non-htmx POST (fallback) should return a plain redirect."""
+        """Non-HTMX POST fallback should return a plain redirect."""
         mock_get_metadata.return_value = {
             "title": "Test Movie",
             "image": "http://example.com/image.jpg",
