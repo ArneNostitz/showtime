@@ -1,5 +1,6 @@
 services:
   yamtrack:
+    build: .
     restart: unless-stopped
     depends_on:
       - redis
