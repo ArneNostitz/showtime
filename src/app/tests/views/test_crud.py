@@ -264,7 +264,7 @@ class WantToWatchButton(TestCase):
 
     @patch("app.providers.services.get_media_metadata")
     def test_want_to_watch_creates_planning_record(self, mock_get_metadata):
-        """POST to media_save with status=Planning creates a record with Planning status."""
+        """POST to media_save with status=Planning creates a Planning record."""
         mock_get_metadata.return_value = {
             "title": "Test Movie",
             "image": "http://example.com/image.jpg",
