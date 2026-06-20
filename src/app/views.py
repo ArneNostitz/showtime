@@ -317,7 +317,9 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
         watch_providers = None
 
     imdb_id = _extract_imdb_id(media_metadata)
-    title_slug = slugify(media_metadata.get("title", "")) or media_metadata.get("title", "")
+    title_slug = (
+        slugify(media_metadata.get("title", "")) or media_metadata.get("title", "")
+    )
 
     context = {
         "media": media_metadata,
@@ -384,7 +386,10 @@ def season_details(request, source, media_id, title, season_number):  # noqa: AR
                 )
 
     imdb_id = _extract_imdb_id(tv_with_seasons_metadata)
-    title_slug = slugify(tv_with_seasons_metadata.get("title", "")) or tv_with_seasons_metadata.get("title", "")
+    title_slug = (
+        slugify(tv_with_seasons_metadata.get("title", ""))
+        or tv_with_seasons_metadata.get("title", "")
+    )
 
     context = {
         "media": season_metadata,

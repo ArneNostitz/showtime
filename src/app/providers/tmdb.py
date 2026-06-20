@@ -531,8 +531,12 @@ def get_trailer(videos):
     if not videos:
         return None
 
-    trailers = [v for v in videos if v.get("site") == "YouTube" and v.get("type") == "Trailer"]
-    teasers = [v for v in videos if v.get("site") == "YouTube" and v.get("type") == "Teaser"]
+    trailers = [
+        v for v in videos if v.get("site") == "YouTube" and v.get("type") == "Trailer"
+    ]
+    teasers = [
+        v for v in videos if v.get("site") == "YouTube" and v.get("type") == "Teaser"
+    ]
 
     for candidate in trailers + teasers:
         if key := candidate.get("key"):
