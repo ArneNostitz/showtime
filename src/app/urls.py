@@ -51,7 +51,6 @@ urlpatterns = [
         name="progress_edit",
     ),
     path("media_save", views.media_save, name="media_save"),
-    path("media_save_planning", views.media_save_planning, name="media_save_planning"),
     path("media_delete", views.media_delete, name="media_delete"),
     path(
         "user_messages/mark_shown",

@@ -663,48 +663,6 @@ def media_save(request):
     return helpers.redirect_back(request)
 
 
-@require_POST
-def media_save_planning(request):
-    """Quick-add media to the planning/watchlist with a single click."""
-    media_id = request.POST["media_id"]
-    source = request.POST["source"]
-    media_type = request.POST["media_type"]
-    season_number = request.POST.get("season_number")
-
-    metadata = services.get_media_metadata(
-        media_type,
-        media_id,
-        source,
-        [season_number],
-    )
-    title = metadata.get("title") or metadata.get("season_title", "")
-    image = metadata.get("image", "")
-
-    item, _ = Item.objects.get_or_create(
-        media_id=media_id,
-        source=source,
-        media_type=media_type,
-        season_number=season_number,
-        defaults={
-            "title": title,
-            "image": image,
-        },
-    )
-    model = apps.get_model(app_label="app", model_name=media_type)
-    instance = model(
-        item=item,
-        user=request.user,
-        status=config.Status.PLANNING.value,
-    )
-    instance.save()
-
-    if request.headers.get("HX-Request"):
-        next_url = request.GET.get("next", "/")
-        response = HttpResponse()
-        response["HX-Redirect"] = next_url
-        return response
-    return helpers.redirect_back(request)
-
 
 @require_POST
 def media_delete(request):

@@ -253,8 +253,8 @@ class DeleteMedia(TestCase):
         )
 
 
-class SavePlanningMedia(TestCase):
-    """Tests for the media_save_planning quick-add view."""
+class WantToWatchButton(TestCase):
+    """Tests for the "Want to Watch" quick-add via media_save with status=Planning."""
 
     def setUp(self):
         """Create a user and log in."""
@@ -263,47 +263,21 @@ class SavePlanningMedia(TestCase):
         self.client.login(**self.credentials)
 
     @patch("app.providers.services.get_media_metadata")
-    def test_htmx_request_returns_hx_redirect(self, mock_get_metadata):
-        """HTMX POST must return HX-Redirect (not 302) so the browser navigates."""
+    def test_want_to_watch_creates_planning_record(self, mock_get_metadata):
+        """POST to media_save with status=Planning creates a record with Planning status."""
         mock_get_metadata.return_value = {
             "title": "Test Movie",
             "image": "http://example.com/image.jpg",
         }
         next_url = "/media/tmdb/movie/238/test-movie/"
         response = self.client.post(
-            reverse("media_save_planning") + f"?next={next_url}",
+            reverse("media_save") + f"?next={next_url}",
             data={
                 "media_id": "238",
                 "source": Sources.TMDB.value,
                 "media_type": MediaTypes.MOVIE.value,
-            },
-            HTTP_HX_REQUEST="true",
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["HX-Redirect"], next_url)
-        self.assertTrue(
-            Movie.objects.filter(
-                item__media_id="238",
-                user=self.user,
-                status=Status.PLANNING.value,
-            ).exists()
-        )
-
-    @patch("app.providers.services.get_media_metadata")
-    def test_non_htmx_request_returns_redirect(self, mock_get_metadata):
-        """Non-HTMX POST fallback should return a plain redirect."""
-        mock_get_metadata.return_value = {
-            "title": "Test Movie",
-            "image": "http://example.com/image.jpg",
-        }
-        next_url = "/media/tmdb/movie/238/test-movie/"
-        response = self.client.post(
-            reverse("media_save_planning") + f"?next={next_url}",
-            data={
-                "media_id": "238",
-                "source": Sources.TMDB.value,
-                "media_type": MediaTypes.MOVIE.value,
+                "instance_id": "",
+                "status": Status.PLANNING.value,
             },
         )
 
@@ -315,3 +289,25 @@ class SavePlanningMedia(TestCase):
                 status=Status.PLANNING.value,
             ).exists()
         )
+
+    @patch("app.providers.services.get_media_metadata")
+    def test_want_to_watch_redirects_to_next(self, mock_get_metadata):
+        """POST to media_save redirects to the next URL after saving."""
+        mock_get_metadata.return_value = {
+            "title": "Test Movie",
+            "image": "http://example.com/image.jpg",
+        }
+        next_url = "/media/tmdb/movie/238/test-movie/"
+        response = self.client.post(
+            reverse("media_save") + f"?next={next_url}",
+            data={
+                "media_id": "238",
+                "source": Sources.TMDB.value,
+                "media_type": MediaTypes.MOVIE.value,
+                "instance_id": "",
+                "status": Status.PLANNING.value,
+            },
+        )
+
+        self.assertIn(response.status_code, [301, 302])
+        self.assertIn(next_url, response["Location"])
