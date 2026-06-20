@@ -29,12 +29,12 @@
               On desktop, the overlay will still appear when you hover your mouse over media cards.
             </p>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer ml-4">
+          <label class="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
             <input class="sr-only peer"
                    type="checkbox"
                    name="clickable_media_cards"
                    {% if user.clickable_media_cards %}checked{% endif %}>
-            <div class="w-12 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+            <div class="w-9 h-5 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-px after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4.5 after:w-4.5 after:transition-all peer-checked:bg-indigo-600">
             </div>
           </label>
         </div>
@@ -50,12 +50,12 @@
             </div>
             <p class="text-xs text-gray-400 ml-7">When enabled, unseen episode images and descriptions will be blurred.</p>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer ml-4">
+          <label class="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
             <input class="sr-only peer"
                    type="checkbox"
                    name="obfuscate_unseen_episodes"
                    {% if user.obfuscate_unseen_episodes %}checked{% endif %}>
-            <div class="w-12 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+            <div class="w-9 h-5 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-px after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4.5 after:w-4.5 after:transition-all peer-checked:bg-indigo-600">
             </div>
           </label>
         </div>
@@ -95,12 +95,12 @@
               Display a progress bar on media items. Items which don't have max progress will be using a dotted line.
             </p>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer ml-4">
+          <label class="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
             <input class="sr-only peer"
                    type="checkbox"
                    name="progress_bar"
                    {% if user.progress_bar %}checked{% endif %}>
-            <div class="w-12 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+            <div class="w-9 h-5 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-px after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4.5 after:w-4.5 after:transition-all peer-checked:bg-indigo-600">
             </div>
           </label>
         </div>
@@ -118,12 +118,12 @@
               Hide media you've already completed from the recommendations section on detail pages.
             </p>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer ml-4">
+          <label class="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
             <input class="sr-only peer"
                    type="checkbox"
                    name="hide_completed_recommendations"
                    {% if user.hide_completed_recommendations %}checked{% endif %}>
-            <div class="w-12 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+            <div class="w-9 h-5 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-px after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4.5 after:w-4.5 after:transition-all peer-checked:bg-indigo-600">
             </div>
           </label>
         </div>
@@ -139,12 +139,12 @@
             </div>
             <p class="text-xs text-gray-400 ml-7">Hide the rating badge from media cards when the rating is zero.</p>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer ml-4">
+          <label class="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
             <input class="sr-only peer"
                    type="checkbox"
                    name="hide_zero_rating"
                    {% if user.hide_zero_rating %}checked{% endif %}>
-            <div class="w-12 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+            <div class="w-9 h-5 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-px after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4.5 after:w-4.5 after:transition-all peer-checked:bg-indigo-600">
             </div>
           </label>
         </div>
@@ -231,7 +231,7 @@
                 {% icon media_type is_active=False %}
                 <span class="text-gray-200 text-sm ml-2">{{ media_type|media_type_readable_plural }}</span>
               </div>
-              <label class="relative inline-flex items-center cursor-pointer">
+              <label class="relative inline-flex items-center cursor-pointer shrink-0">
                 {% with enabled_field=media_type|add:"_enabled" %}
                   <input class="sr-only peer"
                          type="checkbox"
@@ -239,7 +239,7 @@
                          value="{{ media_type }}"
                          {% if user|get_attr:enabled_field %}checked{% endif %}>
                 {% endwith %}
-                <div class="w-12 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+                <div class="w-9 h-5 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-px after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4.5 after:w-4.5 after:transition-all peer-checked:bg-indigo-600">
                 </div>
               </label>
             </div>
