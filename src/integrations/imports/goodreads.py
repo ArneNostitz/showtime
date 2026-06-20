@@ -66,7 +66,8 @@ class GoodReadsImporter:
             try:
                 self._process_row(row)
             except services.ProviderAPIError:
-                error_msg = f"Error processing entry with ID {row['media_id']} "
+                entry_id = row.get("Book Id", row.get("Title", str(row)))
+                error_msg = f"Error processing entry with ID {entry_id} "
                 self.warnings.append(error_msg)
                 continue
             except Exception as error:
