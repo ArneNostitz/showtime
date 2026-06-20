@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import patch
 
 from django.test import TestCase
 
@@ -97,11 +98,30 @@ class Search(TestCase):
         for comic in response["results"]:
             self.assertTrue(all(key in comic for key in required_keys))
 
-    def test_hardcover(self):
+    @patch("app.providers.services.api_request")
+    def test_hardcover(self, mock_api):
         """Test the search method for books from Hardcover.
 
         Assert that all required keys are present in each entry.
         """
+        mock_api.return_value = {
+            "data": {
+                "search": {
+                    "results": {
+                        "found": 1,
+                        "hits": [
+                            {
+                                "document": {
+                                    "id": "12345",
+                                    "title": "1984",
+                                    "image": {"url": "http://example.com/1984.jpg"},
+                                }
+                            }
+                        ],
+                    }
+                }
+            }
+        }
         response = hardcover.search("1984 George Orwell", 1)
         required_keys = {"media_id", "media_type", "title", "image"}
 
@@ -110,7 +130,18 @@ class Search(TestCase):
         for book in response["results"]:
             self.assertTrue(all(key in book for key in required_keys))
 
-    def test_hardcover_not_found(self):
+    @patch("app.providers.services.api_request")
+    def test_hardcover_not_found(self, mock_api):
         """Test the search method for books from Hardcover with no results."""
+        mock_api.return_value = {
+            "data": {
+                "search": {
+                    "results": {
+                        "found": 0,
+                        "hits": [],
+                    }
+                }
+            }
+        }
         response = hardcover.search("xjkqzptmvnsieurytowahdbfglc", 1)
         self.assertEqual(response["results"], [])
