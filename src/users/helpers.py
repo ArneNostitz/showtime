@@ -5,7 +5,7 @@ from datetime import datetime
 import croniter
 from django.utils import timezone
 
-import integrations
+import integrations.tasks
 
 
 def process_task_result(task):
