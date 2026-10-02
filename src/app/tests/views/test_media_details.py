@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from app import views
 from app.models import (
     MediaTypes,
     Sources,
@@ -113,4 +114,36 @@ class MediaDetailsViewTests(TestCase):
             "1668",
             Sources.TMDB.value,
             [1],
+        )
+
+
+class BuildVsembedUrlTests(TestCase):
+    """Test _build_vsembed_url playback options."""
+
+    def test_movie_url_contains_playback_options(self):
+        """Movie URLs start paused with sound and no subtitles."""
+        url = views._build_vsembed_url("tt0111161", MediaTypes.MOVIE.value)
+
+        self.assertEqual(
+            url,
+            "https://vsembed.ru/embed/movie?imdb=tt0111161"
+            "&autoplay=0"
+            "&sub_url=https://example.invalid/subtitles.vtt",
+        )
+
+    def test_tv_url_contains_playback_options(self):
+        """TV URLs start paused with sound and no subtitles."""
+        url = views._build_vsembed_url("tt5875444", MediaTypes.TV.value)
+
+        self.assertTrue(
+            url.startswith("https://vsembed.ru/embed/tv?imdb=tt5875444&"),
+        )
+        self.assertIn("autoplay=0", url)
+        self.assertIn("sub_url=https://example.invalid/subtitles.vtt", url)
+
+    def test_no_imdb_id_returns_none(self):
+        """No IMDb ID means no vsembed URL."""
+        self.assertIsNone(views._build_vsembed_url(None, MediaTypes.TV.value))
+        self.assertIsNone(
+            views._build_vsembed_url("", MediaTypes.MOVIE.value),
         )
