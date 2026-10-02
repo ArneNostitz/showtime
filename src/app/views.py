@@ -60,12 +60,25 @@ def _get_stream_url(current_instance):
 
 
 def _build_vsembed_url(imdb_id, media_type):
-    """Build a vsembed.ru streaming URL from an IMDb ID."""
+    """Build a vsembed.ru streaming URL from an IMDb ID.
+
+    Playback options (documented at https://vsembed.ru):
+    - ``autoplay=0`` keeps the player paused until the user presses play, so
+      playback starts with sound instead of falling back to muted autoplay.
+    - ``sub_url`` pointing to an unreachable file claims the auto-applied
+      subtitle slot (it loads first and fails silently), so playback starts
+      without subtitles; tracks stay selectable in the player's CC menu.
+    """
+    options = (
+        "autoplay=0",
+        "sub_url=https://example.invalid/subtitles.vtt",
+    )
     if not imdb_id:
         return None
-    if media_type == MediaTypes.MOVIE.value:
-        return f"https://vsembed.ru/embed/movie?imdb={imdb_id}"
-    return f"https://vsembed.ru/embed/tv?imdb={imdb_id}"
+    embed_type = (
+        "movie" if media_type == MediaTypes.MOVIE.value else "tv"
+    )
+    return f"https://vsembed.ru/embed/{embed_type}?imdb={imdb_id}&{'&'.join(options)}"
 
 
 @require_GET
