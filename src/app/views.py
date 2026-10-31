@@ -19,6 +19,7 @@ from django.utils.timezone import datetime
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from app import config, helpers, history_processor
+from app import recommendations as recs
 from app import statistics as stats
 from app.forms import EpisodeForm, ManualItemForm, get_form_class
 from app.models import (
@@ -745,6 +746,9 @@ def media_save_planning(request):
     )
     instance.save()
 
+    if request.headers.get("HX-Request") and request.POST.get("inline"):
+        return render(request, "app/components/discover_added.html")
+
     if request.headers.get("HX-Request"):
         next_url = request.GET.get("next", "/")
         response = HttpResponse()
@@ -1109,6 +1113,102 @@ def statistics(request):
     }
 
     return render(request, "app/statistics.html", context)
+
+
+DISCOVER_RECENT_PICKS = 30
+
+
+@require_GET
+def discover(request):
+    """Discover page with personal, surprise and mood based recommendations."""
+    profile = recs.build_profile(request.user, fetch=False)
+    context = {
+        "genres": recs.genre_choices(profile),
+        "mood_questions": recs.MOOD_QUESTIONS,
+        "has_history": bool(profile.tracked),
+        "for_you_rows": [
+            {"media_type": media_type, "title": f"{label} for you"}
+            for media_type, label, enabled in (
+                (MediaTypes.MOVIE.value, "Movies", request.user.movie_enabled),
+                (MediaTypes.TV.value, "TV shows", request.user.tv_enabled),
+            )
+            if enabled
+        ],
+    }
+    return render(request, "app/discover.html", context)
+
+
+def _discover_media_type(request):
+    media_type = request.GET.get("media_type", MediaTypes.MOVIE.value)
+    if media_type not in recs.SUPPORTED_MEDIA_TYPES:
+        return None
+    return media_type
+
+
+def _with_genre_labels(items):
+    for item in items:
+        item["genres"] = recs.genre_labels(item["media_type"], item.get("genre_ids"))
+    return items
+
+
+@require_GET
+def discover_for_you(request):
+    """Return personalised recommendations of one media type."""
+    media_type = _discover_media_type(request)
+    if media_type is None:
+        return HttpResponseBadRequest("Unsupported media type")
+
+    profile = recs.build_profile(request.user)
+    items = _with_genre_labels(recs.for_you(profile, media_type))
+    context = {"items": items, "media_type": media_type}
+    return render(request, "app/components/discover_for_you.html", context)
+
+
+@require_GET
+def discover_surprise(request):
+    """Return a random pick in a genre the user may not know yet."""
+    media_type = _discover_media_type(request)
+    if media_type is None:
+        return HttpResponseBadRequest("Unsupported media type")
+
+    recent = request.session.get("discover_recent_picks", [])
+    profile = recs.build_profile(request.user, fetch=False)
+    try:
+        result = recs.surprise(
+            profile,
+            request.GET.get("genre", "random"),
+            media_type,
+            hidden_gems=request.GET.get("hidden_gems") == "on",
+            exclude=recent,
+        )
+    except ValueError as error:
+        return HttpResponseBadRequest(str(error))
+
+    if result["pick"]:
+        recent = [result["pick"]["media_id"], *recent][:DISCOVER_RECENT_PICKS]
+        request.session["discover_recent_picks"] = recent
+        _with_genre_labels([result["pick"], *result["alternatives"]])
+
+    context = {"result": result, "again_url": request.get_full_path()}
+    return render(request, "app/components/discover_surprise.html", context)
+
+
+@require_GET
+def discover_mood(request):
+    """Return recommendations for the mood quiz answers."""
+    answers = {
+        question["key"]: request.GET[question["key"]]
+        for question in recs.MOOD_QUESTIONS
+        if request.GET.get(question["key"])
+        in {option["value"] for option in question["options"]}
+    }
+    profile = recs.build_profile(request.user)
+    result = recs.mood_recommendations(profile, answers)
+    if result["pick"]:
+        _with_genre_labels([result["pick"], *result["alternatives"]])
+
+    context = {"result": result, "again_url": request.get_full_path()}
+    return render(request, "app/components/discover_mood.html", context)
 
 
 @require_GET

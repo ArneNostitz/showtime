@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% load app_tags %}
+
+{% block title %}
+  Discover - Yamtrack
+{% endblock title %}
+
+{% block content %}
+  <div class="space-y-10">
+    <div class="text-center">
+      <h1 class="text-3xl font-bold">What to watch</h1>
+      <p class="mt-1 text-sm text-gray-400">Recommendations based on what you've watched and rated.</p>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      {# Mood quiz #}
+      <section class="rounded-lg border border-gray-700 bg-[#2a2f35] p-5 shadow-lg"
+               x-data="moodQuiz()">
+        <div class="mb-4 flex items-center gap-3">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#39404b] text-indigo-400">
+            {% include "app/icons/pulse.svg" with classes="h-5 w-5" %}
+          </div>
+          <div>
+            <h2 class="text-xl font-semibold text-white">What mood are you in?</h2>
+            <p class="text-xs text-gray-400">A few quick questions and we'll pick something for tonight.</p>
+          </div>
+        </div>
+
+        <div class="mb-4 flex gap-1.5">
+          <template x-for="(question, index) in questions" :key="question.key">
+            <div class="h-1 flex-1 rounded-full"
+                 :class="index <= step ? 'bg-indigo-500' : 'bg-gray-700'"></div>
+          </template>
+        </div>
+
+        <template x-if="step < questions.length">
+          <div>
+            <p class="mb-3 text-base font-medium text-white"
+               x-text="questions[step].question"></p>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <template x-for="option in questions[step].options" :key="option.value">
+                <button type="button"
+                        @click="answer(option.value)"
+                        class="rounded-md border border-gray-700 bg-[#39404b] px-3 py-2 text-left transition-colors hover:border-indigo-500 hover:bg-[#454d5a] cursor-pointer"
+                        :class="answers[questions[step].key] === option.value ? 'border-indigo-500' : ''">
+                  <span class="block text-sm font-medium text-white" x-text="option.label"></span>
+                  <span class="block text-xs text-gray-400"
+                        x-show="option.hint"
+                        x-text="option.hint"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <template x-if="step >= questions.length">
+          <div class="flex flex-col items-start gap-3">
+            <p class="text-sm text-gray-300">Got it! Your picks are below.</p>
+          </div>
+        </template>
+
+        <div class="mt-4 flex items-center justify-between text-xs">
+          <button type="button"
+                  x-show="step > 0"
+                  @click="step--"
+                  class="text-gray-400 hover:text-white cursor-pointer">Back</button>
+          <button type="button"
+                  x-show="step > 0"
+                  @click="reset()"
+                  class="ml-auto text-gray-400 hover:text-white cursor-pointer">Start over</button>
+        </div>
+      </section>
+
+      {# Surprise me #}
+      <section class="rounded-lg border border-gray-700 bg-[#2a2f35] p-5 shadow-lg"
+               x-data="{ mediaType: 'movie', genre: 'random', genres: JSON.parse(document.getElementById('discover-genres').textContent) }">
+        <div class="mb-4 flex items-center gap-3">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#39404b] text-amber-400">
+            {% include "app/icons/sparkles.svg" with classes="h-5 w-5" %}
+          </div>
+          <div>
+            <h2 class="text-xl font-semibold text-white">Surprise me</h2>
+            <p class="text-xs text-gray-400">A random, well-rated pick you haven't tracked yet.</p>
+          </div>
+        </div>
+
+        <form hx-get="{% url 'discover_surprise' %}"
+              hx-target="#discover-results"
+              hx-indicator="#discover-results-loading"
+              class="space-y-4">
+          <input type="hidden" name="media_type" :value="mediaType">
+          <input type="hidden" name="genre" :value="genre">
+
+          <div class="flex w-fit overflow-hidden rounded-md border border-gray-700">
+            <button type="button"
+                    @click="mediaType = 'movie'"
+                    class="px-4 py-1.5 text-sm cursor-pointer"
+                    :class="mediaType === 'movie' ? 'bg-indigo-600 text-white' : 'bg-[#39404b] text-gray-300 hover:bg-[#454d5a]'">
+              Movies
+            </button>
+            <button type="button"
+                    @click="mediaType = 'tv'; if (genre !== 'random' && !genres.find(g => g.key === genre).tv) genre = 'random'"
+                    class="px-4 py-1.5 text-sm cursor-pointer"
+                    :class="mediaType === 'tv' ? 'bg-indigo-600 text-white' : 'bg-[#39404b] text-gray-300 hover:bg-[#454d5a]'">
+              TV Shows
+            </button>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <button type="button"
+                    @click="genre = 'random'"
+                    class="rounded-full px-3 py-1 text-xs cursor-pointer"
+                    :class="genre === 'random' ? 'bg-amber-500 text-gray-900 font-semibold' : 'bg-[#39404b] text-gray-300 hover:bg-[#454d5a]'"
+                    title="Pick a genre you rarely watch">Explore something new</button>
+            <template x-for="g in genres.filter(g => g[mediaType])" :key="g.key">
+              <button type="button"
+                      @click="genre = g.key"
+                      class="rounded-full px-3 py-1 text-xs cursor-pointer"
+                      :class="genre === g.key ? 'bg-indigo-600 text-white' : 'bg-[#39404b] text-gray-300 hover:bg-[#454d5a]'"
+                      :title="g.new_to_you ? 'You rarely watch this genre' : ''">
+                <span x-text="g.label"></span>
+                <span x-show="g.new_to_you" class="ml-0.5 text-amber-400">•</span>
+              </button>
+            </template>
+          </div>
+          {% if has_history %}
+            <p class="text-xs text-gray-500"><span class="text-amber-400">•</span> = new to you</p>
+          {% endif %}
+
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+              <input type="checkbox" name="hidden_gems" class="accent-indigo-500">
+              Hidden gems only
+            </label>
+            <button type="submit"
+                    class="inline-flex items-center gap-2 rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-gray-900 transition-colors hover:bg-amber-400 cursor-pointer">
+              {% include "app/icons/sparkles.svg" with classes="w-4 h-4" %}
+              Surprise me
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div id="discover-results-wrapper" class="space-y-3">
+      <div id="discover-results-loading" class="htmx-indicator">
+        <div class="flex items-center gap-2 text-sm text-gray-400">
+          {% include "app/icons/circle-spinning-clockwise.svg" with classes="w-4 h-4 animate-spin" %}
+          Finding something good…
+        </div>
+      </div>
+      <div id="discover-results"></div>
+    </div>
+
+    {# Personal recommendations #}
+    {% for row in for_you_rows %}
+      <section class="space-y-4">
+        <div class="flex items-center gap-3">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#39404b] text-indigo-400">
+            {% icon row.media_type is_active=True %}
+          </div>
+          <h2 class="text-2xl font-semibold text-white">{{ row.title }}</h2>
+        </div>
+        <div hx-get="{% url 'discover_for_you' %}?media_type={{ row.media_type }}"
+             hx-trigger="load"
+             hx-swap="innerHTML">
+          <div class="flex items-center gap-2 text-sm text-gray-400">
+            {% include "app/icons/circle-spinning-clockwise.svg" with classes="w-4 h-4 animate-spin" %}
+            Crunching your watch history…
+          </div>
+        </div>
+      </section>
+    {% endfor %}
+  </div>
+
+  {{ genres|json_script:"discover-genres" }}
+  {{ mood_questions|json_script:"discover-mood-questions" }}
+  <script>
+    function moodQuiz() {
+      return {
+        questions: JSON.parse(document.getElementById("discover-mood-questions").textContent),
+        step: 0,
+        answers: {},
+        answer(value) {
+          this.answers[this.questions[this.step].key] = value;
+          this.step++;
+          if (this.step >= this.questions.length) {
+            this.submit();
+          }
+        },
+        reset() {
+          this.step = 0;
+          this.answers = {};
+        },
+        submit() {
+          htmx.ajax("GET", "{% url 'discover_mood' %}", {
+            target: "#discover-results",
+            indicator: "#discover-results-loading",
+            values: this.answers,
+          }).then(() => {
+            document.getElementById("discover-results-wrapper").scrollIntoView({ behavior: "smooth" });
+          });
+        },
+      };
+    }
+  </script>
+{% endblock content %}

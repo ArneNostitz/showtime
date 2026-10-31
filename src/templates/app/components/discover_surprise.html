@@ -1,0 +1,23 @@
+{% load app_tags %}
+<div class="space-y-5">
+  {% if result.pick %}
+    {% if result.new_to_you %}
+      {% firstof "Surprise · "|add:result.genre_label|add:" · new to you" as label %}
+    {% else %}
+      {% firstof "Surprise · "|add:result.genre_label as label %}
+    {% endif %}
+    {% include "app/components/discover_pick.html" with pick=result.pick label=label again_label="Surprise me again" %}
+    {% if result.alternatives %}
+      <h3 class="text-lg font-semibold text-white">Also worth a shot</h3>
+      <div class="grid grid-cols-2 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(150px,1fr))]">
+        {% for item in result.alternatives %}
+          {% include "app/components/discover_card.html" with item=item %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% else %}
+    <p class="rounded-lg bg-[#2a2f35] p-4 text-sm text-gray-400">
+      Nothing new found in {{ result.genre_label }} with these filters. Try another genre or toggle hidden gems.
+    </p>
+  {% endif %}
+</div>

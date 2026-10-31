@@ -1,0 +1,12 @@
+{% load app_tags %}
+{% if items %}
+  <div class="grid grid-cols-2 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(150px,1fr))]">
+    {% for item in items %}
+      {% include "app/components/discover_card.html" with item=item %}
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="rounded-lg bg-[#2a2f35] p-4 text-sm text-gray-400">
+    Track and rate a few {{ media_type|media_type_readable_plural|lower }} to get personal recommendations here.
+  </p>
+{% endif %}

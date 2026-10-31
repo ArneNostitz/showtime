@@ -877,3 +877,116 @@ def tv_changes():
 def movie_changes():
     """Return changed movie ids from TMDB for the last days across all pages."""
     return get_changed_ids(MediaTypes.MOVIE.value)
+
+
+def format_discover_result(media, media_type):
+    """Format a raw TMDB list result (discover, trending, recommendations)."""
+    release = media.get("release_date") or media.get("first_air_date") or ""
+    return {
+        "media_id": str(media["id"]),
+        "source": Sources.TMDB.value,
+        "media_type": media_type,
+        "title": get_title(media),
+        "image": get_image_url(media.get("poster_path")),
+        "genre_ids": media.get("genre_ids", []),
+        "score": round(media.get("vote_average") or 0, 1),
+        "score_count": media.get("vote_count") or 0,
+        "popularity": media.get("popularity") or 0,
+        "year": release[:4],
+        "synopsis": media.get("overview") or "",
+    }
+
+
+def taste_seed(media_type, media_id):
+    """Return the genres and recommendations for a title the user tracked."""
+    cache_key = f"{Sources.TMDB.value}_taste_seed_{media_type}_{media_id}"
+    data = cache.get(cache_key)
+
+    if data is None:
+        url = f"{base_url}/{media_type}/{media_id}"
+        params = {**base_params, "append_to_response": "recommendations"}
+
+        try:
+            response = services.api_request(
+                Sources.TMDB.value,
+                "GET",
+                url,
+                params=params,
+            )
+        except requests.exceptions.HTTPError as error:
+            handle_error(error)
+
+        data = {
+            "genre_ids": [genre["id"] for genre in response.get("genres", [])],
+            "recommendations": [
+                format_discover_result(media, media_type)
+                for media in response.get("recommendations", {}).get("results", [])
+            ],
+        }
+        cache.set(cache_key, data, int(timedelta(days=7).total_seconds()))
+
+    return data
+
+
+def discover(media_type, filters, page=1):
+    """Return one page of TMDB discover results for the given filters."""
+    params = {
+        **base_params,
+        "include_adult": "true" if settings.TMDB_NSFW else "false",
+        **filters,
+        "page": page,
+    }
+    filter_key = "&".join(
+        f"{key}={value}" for key, value in sorted(params.items()) if key != "api_key"
+    )
+    cache_key = f"{Sources.TMDB.value}_discover_{media_type}_{filter_key}"
+    data = cache.get(cache_key)
+
+    if data is None:
+        try:
+            response = services.api_request(
+                Sources.TMDB.value,
+                "GET",
+                f"{base_url}/discover/{media_type}",
+                params=params,
+            )
+        except requests.exceptions.HTTPError as error:
+            handle_error(error)
+
+        data = {
+            "page": response.get("page", page),
+            # TMDB refuses pages above 500
+            "total_pages": min(response.get("total_pages", 1), 500),
+            "results": [
+                format_discover_result(media, media_type)
+                for media in response.get("results", [])
+            ],
+        }
+        cache.set(cache_key, data, int(timedelta(hours=12).total_seconds()))
+
+    return data
+
+
+def trending(media_type):
+    """Return this week's trending titles on TMDB."""
+    cache_key = f"{Sources.TMDB.value}_trending_{media_type}"
+    data = cache.get(cache_key)
+
+    if data is None:
+        try:
+            response = services.api_request(
+                Sources.TMDB.value,
+                "GET",
+                f"{base_url}/trending/{media_type}/week",
+                params=base_params,
+            )
+        except requests.exceptions.HTTPError as error:
+            handle_error(error)
+
+        data = [
+            format_discover_result(media, media_type)
+            for media in response.get("results", [])
+        ]
+        cache.set(cache_key, data, int(timedelta(hours=12).total_seconds()))
+
+    return data
