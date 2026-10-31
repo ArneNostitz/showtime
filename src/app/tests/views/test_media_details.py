@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from app import views
@@ -116,30 +116,102 @@ class MediaDetailsViewTests(TestCase):
             [1],
         )
 
+    @patch("app.providers.services.get_media_metadata")
+    @patch("app.providers.tmdb.process_episodes")
+    def test_season_details_vidsrc_play_button(
+        self,
+        mock_process_episodes,
+        mock_get_metadata,
+    ):
+        """Episode thumbnails get a VidSrc play button for the fullscreen player."""
+        self.user.vsembed_enabled = True
+        self.user.save()
+        mock_get_metadata.return_value = {
+            "title": "Test TV Show",
+            "media_id": "1668",
+            "source": Sources.TMDB.value,
+            "media_type": MediaTypes.TV.value,
+            "image": "http://example.com/image.jpg",
+            "imdb_id": "tt0108778",
+            "season/1": {
+                "title": "Season 1",
+                "media_id": "1668",
+                "media_type": MediaTypes.SEASON.value,
+                "source": Sources.TMDB.value,
+                "image": "http://example.com/season.jpg",
+                "season_number": 1,
+                "episodes": [],
+            },
+        }
+        mock_process_episodes.return_value = [
+            {
+                "media_id": "1668",
+                "source": Sources.TMDB.value,
+                "media_type": MediaTypes.EPISODE.value,
+                "season_number": 1,
+                "episode_number": 2,
+                "title": "Episode 2",
+                "image": "http://example.com/episode.jpg",
+                "air_date": "2023-01-01",
+                "history": [],
+            },
+        ]
+
+        response = self.client.get(
+            reverse(
+                "season_details",
+                kwargs={
+                    "source": Sources.TMDB.value,
+                    "media_id": "1668",
+                    "title": "test-tv-show",
+                    "season_number": 1,
+                },
+            ),
+        )
+
+        self.assertContains(
+            response,
+            "https://vidsrc.sh/embed/tv?imdb=tt0108778&amp;autoplay=1",
+        )
+        self.assertContains(response, "subtitles.vtt&season=1&episode=2")
+        self.assertContains(response, "data-vidsrc-play")
+        self.assertNotContains(response, "window.open(")
+        self.assertContains(response, 'id="vidsrc-domains"')
+        self.assertContains(response, "js/vidsrcPlayer.js")
+
 
 class BuildVsembedUrlTests(TestCase):
     """Test _build_vsembed_url playback options."""
 
     def test_movie_url_contains_playback_options(self):
-        """Movie URLs start paused with sound and no subtitles."""
+        """Movie URLs autoplay on the primary VidSrc domain with no subtitles."""
         url = views._build_vsembed_url("tt0111161", MediaTypes.MOVIE.value)
 
         self.assertEqual(
             url,
-            "https://vsembed.ru/embed/movie?imdb=tt0111161"
-            "&autoplay=0"
+            "https://vidsrc.sh/embed/movie?imdb=tt0111161"
+            "&autoplay=1"
             "&sub_url=https://example.invalid/subtitles.vtt",
         )
 
     def test_tv_url_contains_playback_options(self):
-        """TV URLs start paused with sound and no subtitles."""
+        """TV URLs autoplay with no subtitles."""
         url = views._build_vsembed_url("tt5875444", MediaTypes.TV.value)
 
         self.assertTrue(
-            url.startswith("https://vsembed.ru/embed/tv?imdb=tt5875444&"),
+            url.startswith("https://vidsrc.sh/embed/tv?imdb=tt5875444&"),
         )
-        self.assertIn("autoplay=0", url)
+        self.assertIn("autoplay=1", url)
         self.assertIn("sub_url=https://example.invalid/subtitles.vtt", url)
+
+    @override_settings(VIDSRC_DOMAINS=["player.example.com", "vidsrc.sh"])
+    def test_uses_first_configured_domain(self):
+        """The first configured VidSrc domain is used for links."""
+        url = views._build_vsembed_url("tt0111161", MediaTypes.MOVIE.value)
+
+        self.assertTrue(
+            url.startswith("https://player.example.com/embed/movie?imdb=tt0111161&"),
+        )
 
     def test_no_imdb_id_returns_none(self):
         """No IMDb ID means no vsembed URL."""

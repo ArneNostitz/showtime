@@ -471,6 +471,14 @@ SIMKL_SECRET = config(
     ),
 )
 
+# VidSrc embed domains, in order of preference. The first one is used for
+# links; the others are mirrors the player falls back to when it is unreachable.
+VIDSRC_DOMAINS = config(
+    "VIDSRC_DOMAINS",
+    default="vidsrc.sh,vsembed.ru,vsembed.su",
+    cast=Csv(),
+)
+
 
 TESTING = False
 

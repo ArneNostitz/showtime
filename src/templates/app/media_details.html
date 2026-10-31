@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load app_tags %}
 {% load humanize %}
+{% load static %}
 
 {% block title %}
   {{ media.title }}
@@ -533,11 +534,12 @@
                 <a href="{{ vsembed_url }}"
                    target="_blank"
                    rel="noopener"
+                   data-vidsrc-play
                    class="flex items-center gap-2 text-sm text-gray-200 hover:text-indigo-400 transition group">
                   <div class="p-1 bg-red-600/20 rounded">
                     {% include "app/icons/play.svg" with classes="w-3.5 h-3.5 text-red-500" %}
                   </div>
-                  <span>Watch on VsEmbed</span>
+                  <span>Watch on VidSrc</span>
                 </a>
               {% endif %}
 
@@ -682,7 +684,7 @@
                          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
                          hx-vals='{"media_id": "{{ media.media_id }}", "season_number": "{{ media.season_number }}", "source": "{{ media.source }}", "episode_number": "{{ episode.episode_number }}", "end_date": "{% now "Y-m-d" %}"}'
                          hx-target="body"
-                         hx-on:click="window.open('{{ vsembed_url }}&season={{ media.season_number }}&episode={{ episode.episode_number }}', '_blank')"
+                         data-vidsrc-play
                          class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/30">
                         {% include "app/icons/play.svg" with classes="w-10 h-10 text-white drop-shadow-lg" %}
                       </a>
@@ -813,3 +815,10 @@
     </div>
   </div>
 {% endblock content %}
+
+{% block js %}
+  {% if vsembed_enabled and vsembed_url %}
+    {{ vidsrc_domains|json_script:"vidsrc-domains" }}
+    <script src="{% static 'js/vidsrcPlayer.js' %}{% get_static_file_mtime 'js/vidsrcPlayer.js' %}"></script>
+  {% endif %}
+{% endblock js %}
