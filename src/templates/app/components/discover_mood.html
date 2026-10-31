@@ -1,0 +1,19 @@
+{% load app_tags %}
+<div class="space-y-5">
+  {% if result.pick %}
+    {% firstof "Your mood pick · "|add:result.summary as label %}
+    {% include "app/components/discover_pick.html" with pick=result.pick label=label again_label="Shuffle" %}
+    {% if result.alternatives %}
+      <h3 class="text-lg font-semibold text-white">More for this mood</h3>
+      <div class="grid grid-cols-2 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(150px,1fr))]">
+        {% for item in result.alternatives %}
+          {% include "app/components/discover_card.html" with item=item %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% else %}
+    <p class="rounded-lg bg-[#2a2f35] p-4 text-sm text-gray-400">
+      Couldn't find anything new for that mood. Try different answers.
+    </p>
+  {% endif %}
+</div>

@@ -1,0 +1,16 @@
+<form hx-post="{% url 'media_save_planning' %}"
+      hx-target="this"
+      hx-swap="outerHTML"
+      class="inline-flex">
+  {% csrf_token %}
+  <input type="hidden" name="media_id" value="{{ item.media_id }}">
+  <input type="hidden" name="source" value="{{ item.source }}">
+  <input type="hidden" name="media_type" value="{{ item.media_type }}">
+  <input type="hidden" name="inline" value="1">
+  <button type="submit"
+          class="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 cursor-pointer"
+          title="Add to your watchlist">
+    {% include "app/icons/plus.svg" with classes="w-3.5 h-3.5" %}
+    Watchlist
+  </button>
+</form>

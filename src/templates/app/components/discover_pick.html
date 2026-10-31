@@ -1,0 +1,49 @@
+{% load app_tags %}
+<div class="flex flex-col gap-5 rounded-lg border border-gray-700 bg-[#2a2f35] p-4 shadow-lg sm:flex-row">
+  <a href="{{ pick|media_url }}" class="block w-40 shrink-0 self-center sm:self-start">
+    <img alt="{{ pick.title }}"
+         class="w-full aspect-2/3 rounded-md bg-[#3e454d] object-cover"
+         src="{{ pick.image }}">
+  </a>
+  <div class="flex min-w-0 flex-1 flex-col gap-3">
+    <div>
+      <span class="text-xs font-semibold uppercase tracking-wider text-indigo-400">{{ label }}</span>
+      <a href="{{ pick|media_url }}"
+         class="block text-2xl font-bold text-white transition duration-300 hover:text-indigo-400">{{ pick.title }}</a>
+      <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-400">
+        {% if pick.year %}<span>{{ pick.year }}</span>{% endif %}
+        <span>{{ pick.media_type|media_type_readable }}</span>
+        {% if pick.score %}
+          <span class="flex items-center">
+            {% include "app/icons/star.svg" with classes="w-4 h-4 text-yellow-400 mr-1 fill-current" %}
+            {{ pick.score }}
+            <span class="ml-1 text-xs text-gray-500">({{ pick.score_count }})</span>
+          </span>
+        {% endif %}
+      </div>
+    </div>
+    {% if pick.genres %}
+      <div class="flex flex-wrap gap-2">
+        {% for genre in pick.genres %}
+          <span class="rounded-full bg-[#39404b] px-2.5 py-0.5 text-xs text-gray-300">{{ genre }}</span>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% if pick.synopsis %}<p class="line-clamp-5 text-sm text-gray-300">{{ pick.synopsis }}</p>{% endif %}
+    <div class="mt-auto flex flex-wrap items-center gap-2">
+      {% include "app/components/discover_watchlist_button.html" with item=pick %}
+      <a href="{{ pick|media_url }}"
+         class="inline-flex items-center gap-1.5 rounded-md bg-[#39404b] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#454d5a]">
+        {% include "app/icons/info.svg" with classes="w-3.5 h-3.5" %}
+        Details
+      </a>
+      <button hx-get="{{ again_url }}"
+              hx-target="#discover-results"
+              hx-indicator="#discover-results-loading"
+              class="inline-flex items-center gap-1.5 rounded-md bg-[#39404b] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#454d5a] cursor-pointer">
+        {% include "app/icons/repeat.svg" with classes="w-3.5 h-3.5" %}
+        {{ again_label }}
+      </button>
+    </div>
+  </div>
+</div>

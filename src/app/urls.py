@@ -87,6 +87,10 @@ urlpatterns = [
         name="search_parent_season",
     ),
     path("statistics", views.statistics, name="statistics"),
+    path("discover", views.discover, name="discover"),
+    path("discover/for-you", views.discover_for_you, name="discover_for_you"),
+    path("discover/surprise", views.discover_surprise, name="discover_surprise"),
+    path("discover/mood", views.discover_mood, name="discover_mood"),
     path("serviceworker.js", views.service_worker, name="service_worker"),
     path(
         "streaming-links/<int:item_id>",

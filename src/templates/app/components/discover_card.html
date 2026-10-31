@@ -1,0 +1,33 @@
+{% load app_tags %}
+<div class="flex flex-col overflow-hidden rounded-lg bg-[#2a2f35] shadow-lg">
+  <a href="{{ item|media_url }}" class="relative block">
+    <img alt="{{ item.title }}"
+         class="lazyload w-full aspect-2/3 bg-[#3e454d] {% if item.image != IMG_NONE %}object-cover{% endif %}"
+         data-src="{{ item.image }}"
+         src="{{ IMG_NONE }}">
+    {% if item.score %}
+      <span class="absolute top-2 right-2 flex items-center rounded-md bg-gray-900/90 px-2 py-1 text-xs text-white shadow-md">
+        {% include "app/icons/star.svg" with classes="w-3.5 h-3.5 text-yellow-400 mr-1 fill-current" %}
+        {{ item.score }}
+      </span>
+    {% endif %}
+  </a>
+  <div class="flex flex-1 flex-col gap-2 p-3">
+    <div>
+      <a href="{{ item|media_url }}"
+         class="line-clamp-1 text-sm font-semibold text-white transition duration-300 hover:text-indigo-400"
+         title="{{ item.title }}">{{ item.title }}</a>
+      <p class="line-clamp-1 text-xs text-gray-400">
+        {% if item.year %}{{ item.year }}{% endif %}
+        {% if item.year and item.genres %}·{% endif %}
+        {{ item.genres|slice:":2"|join:", " }}
+      </p>
+    </div>
+    {% if item.reason %}
+      <p class="line-clamp-2 text-xs text-indigo-300" title="{{ item.reason }}">{{ item.reason }}</p>
+    {% endif %}
+    <div class="mt-auto">
+      {% include "app/components/discover_watchlist_button.html" with item=item %}
+    </div>
+  </div>
+</div>
