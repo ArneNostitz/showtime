@@ -1,12 +1,18 @@
 /**
- * Fullscreen VidSrc player.
+ * Fullscreen VidSrc player with availability check.
  *
- * Clicking a link marked with `data-vidsrc-play` opens its embed URL in a
- * full-viewport overlay and requests fullscreen within the same click, so the
- * browser grants it. The iframe delegates autoplay, letting playback start
- * with sound. Before loading, the title is looked up on the VidSrc info API
- * of each configured domain (read from the `vidsrc-domains` JSON script) and
- * the first reachable mirror is used.
+ * Every link marked with `data-vidsrc-play` is checked against the VidSrc info
+ * API before it is shown: the play button only appears when VidSrc has the
+ * title (or the check could not be completed), otherwise it is replaced by a
+ * "No media yet" label. Episodes are resolved from a single show lookup
+ * (`/info/tv/{id}.json` lists the available episode range per season), with a
+ * per-episode lookup only for seasons that have gaps. Each configured domain
+ * (read from the `vidsrc-domains` JSON script) is tried in order and the first
+ * reachable mirror is used.
+ *
+ * Clicking a link opens its embed URL in a full-viewport overlay and requests
+ * fullscreen within the same click, so the browser grants it. The iframe
+ * delegates autoplay, letting playback start with sound.
  *
  * The overlay is attached to <html> rather than <body> so it survives the
  * htmx body swap triggered by the episode "mark as watched" request.
@@ -14,7 +20,14 @@
 (function () {
   "use strict";
 
+  if (window.vidsrcPlayer) {
+    window.vidsrcPlayer.scan(document);
+    return;
+  }
+
   const PROBE_TIMEOUT_MS = 4000;
+  const MISSING_TEXT = "No media yet";
+  const lookups = new Map();
   let overlay = null;
   let wasFullscreen = false;
 
@@ -30,8 +43,8 @@
     return domains;
   }
 
-  /** Map an embed URL (path or query format) to its VidSrc info API path. */
-  function infoPath(url) {
+  /** Parse an embed URL (path or query format) into its title reference. */
+  function parseEmbed(url) {
     const parts = url.pathname.split("/").filter(Boolean);
     const start = parts.indexOf("embed");
     if (start === -1) return null;
@@ -42,8 +55,15 @@
       episode = url.searchParams.get("episode");
     }
     if (!id || (type !== "movie" && type !== "tv")) return null;
-    const suffix = type === "tv" && season && episode ? `/${season}/${episode}` : "";
-    return `/info/${type}/${encodeURIComponent(id)}${suffix}.json`;
+    if (type === "tv" && season && episode) {
+      return { type, id, season: Number(season), episode: Number(episode) };
+    }
+    return { type, id };
+  }
+
+  function infoPath(ref) {
+    const suffix = ref.season !== undefined ? `/${ref.season}/${ref.episode}` : "";
+    return `/info/${ref.type}/${encodeURIComponent(ref.id)}${suffix}.json`;
   }
 
   async function probe(domain, path) {
@@ -52,29 +72,104 @@
     try {
       const response = await fetch(`https://${domain}${path}`, {
         credentials: "omit",
-        cache: "no-store",
         signal: controller.signal,
       });
-      if (response.status === 404) return "missing";
-      return response.ok ? "ok" : "error";
+      if (response.status === 404) return { status: "missing" };
+      if (!response.ok) return { status: "error" };
+      return { status: "ok", data: await response.json().catch(() => null) };
     } catch (e) {
-      return "error";
+      return { status: "error" };
     } finally {
       clearTimeout(timer);
     }
   }
 
-  /** Resolve to the first mirror that answers, `null` if the title is missing. */
-  async function resolveDomain(url) {
-    const domains = getDomains(url.host);
-    const path = infoPath(url);
-    if (!path) return url.host;
-    for (const domain of domains) {
-      const result = await probe(domain, path);
-      if (result === "ok") return domain;
-      if (result === "missing") return null;
+  /**
+   * Look a path up on each mirror in turn (memoized).
+   * Resolves to `{status: "ok"|"missing"|"unknown", domain, data}`.
+   */
+  function lookup(host, path) {
+    if (!lookups.has(path)) {
+      lookups.set(
+        path,
+        (async () => {
+          for (const domain of getDomains(host)) {
+            const result = await probe(domain, path);
+            if (result.status !== "error") return { ...result, domain };
+          }
+          lookups.delete(path);
+          return { status: "unknown", domain: host };
+        })(),
+      );
     }
-    return url.host;
+    return lookups.get(path);
+  }
+
+  /** Whether an episode is covered by the show info's season ranges, or `null` if unclear. */
+  function episodeInShow(data, ref) {
+    const seasons = data && Array.isArray(data.seasons) ? data.seasons : null;
+    if (!seasons) return null;
+    const season = seasons.find((s) => Number(s.season) === ref.season);
+    if (!season) return false;
+    const first = Number(season.first_episode);
+    const last = Number(season.last_episode);
+    if (ref.episode < first || ref.episode > last) return false;
+    return Number(season.episodes) === last - first + 1 ? true : null;
+  }
+
+  /** Resolve a title's availability: `{status, domain}`. */
+  async function availability(url) {
+    const ref = parseEmbed(url);
+    if (!ref) return { status: "unknown", domain: url.host };
+    if (ref.season === undefined) return lookup(url.host, infoPath(ref));
+
+    const show = await lookup(url.host, infoPath({ type: ref.type, id: ref.id }));
+    if (show.status === "missing") return show;
+    if (show.status === "ok") {
+      const covered = episodeInShow(show.data, ref);
+      if (covered === true) return show;
+      if (covered === false) return { status: "missing", domain: show.domain };
+    }
+    return lookup(url.host, infoPath(ref));
+  }
+
+  function markMissing(link) {
+    const el = document.createElement("div");
+    el.className = link.className;
+    el.setAttribute("data-vidsrc-missing", "");
+    el.title = "This title is not available on VidSrc yet";
+    const label = link.querySelector("[data-vidsrc-label]");
+    if (label) {
+      label.textContent = MISSING_TEXT;
+      el.append(...link.childNodes);
+      el.style.cssText = "cursor:default;opacity:.6;";
+    } else {
+      const badge = document.createElement("span");
+      badge.textContent = MISSING_TEXT;
+      badge.style.cssText =
+        "color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:4px 10px;border-radius:9999px;background:rgba(0,0,0,.6);";
+      el.append(badge);
+      el.style.cursor = "default";
+    }
+    link.replaceWith(el);
+  }
+
+  /** Check every unchecked play link under `root`, hiding it until resolved. */
+  function scan(root) {
+    const scope = root && root.querySelectorAll ? root : document;
+    const links = Array.from(scope.querySelectorAll("a[data-vidsrc-play]:not([data-vidsrc-checked])"));
+    if (scope.matches && scope.matches("a[data-vidsrc-play]:not([data-vidsrc-checked])")) links.push(scope);
+    for (const link of links) {
+      link.setAttribute("data-vidsrc-checked", "");
+      link.style.visibility = "hidden";
+      availability(new URL(link.href, window.location.href)).then((result) => {
+        if (result.status === "missing") {
+          markMissing(link);
+        } else {
+          link.style.visibility = "";
+        }
+      });
+    }
   }
 
   function showMessage(text) {
@@ -130,13 +225,13 @@
       current.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
     }
 
-    const domain = await resolveDomain(url);
+    const result = await availability(url);
     if (overlay !== current) return;
-    if (domain === null) {
+    if (result.status === "missing") {
       showMessage("This title is not available on VidSrc yet.");
       return;
     }
-    url.host = domain;
+    url.host = result.domain;
 
     const iframe = document.createElement("iframe");
     iframe.src = url.toString();
@@ -170,5 +265,8 @@
     if (overlay && event.key === "Escape" && !document.fullscreenElement) close();
   });
 
-  window.vidsrcPlayer = { open, close };
+  document.addEventListener("htmx:load", (event) => scan(event.detail && event.detail.elt));
+
+  window.vidsrcPlayer = { open, close, scan };
+  scan(document);
 })();
