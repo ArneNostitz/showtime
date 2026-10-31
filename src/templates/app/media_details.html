@@ -676,8 +676,8 @@
                          :class="{ 'blur': obfuscated && hasImage, 'cursor-pointer': obfuscated && hasImage, 'cursor-default': !obfuscated || !hasImage }"
                          @click="obfuscated = false">
 
-                    {% if vsembed_enabled and vsembed_url and episode.air_date and episode.air_date <= today %}
-                      <a href="{{ vsembed_url }}&season={{ media.season_number }}&episode={{ episode.episode_number }}"
+                    {% if vsembed_enabled and episode.vsembed_url and episode.air_date and episode.air_date <= today %}
+                      <a href="{{ episode.vsembed_url }}"
                          target="_blank"
                          rel="noopener"
                          hx-post="{% url 'episode_save' %}?next={{ request.path|urlencode }}"

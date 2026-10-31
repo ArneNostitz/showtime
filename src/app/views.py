@@ -59,30 +59,47 @@ def _get_stream_url(current_instance):
     return None
 
 
-def _build_vsembed_url(imdb_id, media_type):
-    """Build a VidSrc embed URL from an IMDb ID.
+VIDSRC_PLAYBACK_OPTIONS = (
+    "autoplay=1",
+    "sub_url=https://example.invalid/subtitles.vtt",
+)
 
-    Playback options (documented at https://vsembed.ru/vidsrc/docs/):
+
+def _vidsrc_id(source, media_id, imdb_id):
+    """Return the ID VidSrc should look the title up by: TMDB ID, else IMDb ID."""
+    if source == Sources.TMDB.value and media_id:
+        return str(media_id)
+    return imdb_id or None
+
+
+def _build_vsembed_url(content_id, media_type, season=None, episode=None):
+    """Build a VidSrc embed URL in the documented path format.
+
+    ``/embed/movie/{id}``, ``/embed/tv/{id}`` or ``/embed/tv/{id}/{season}/{episode}``
+    where ``id`` is a numeric TMDB ID or an IMDb ID (see
+    https://vsembed.ru/vidsrc/docs/).
+
+    Playback options:
     - ``autoplay=1`` starts playback as soon as the player is opened; the
       player is embedded with autoplay delegated, so it starts unmuted.
     - ``sub_url`` pointing to an unreachable file claims the auto-applied
       subtitle slot (it takes precedence over ``ds_lang`` and the viewer's
       saved language, then fails silently), so playback starts without
       subtitles; tracks stay selectable in the player's CC menu.
-
-    Uses the query string format so ``&season=N&episode=M`` can be appended.
     """
-    if not imdb_id:
+    if not content_id:
         return None
-    options = (
-        "autoplay=1",
-        "sub_url=https://example.invalid/subtitles.vtt",
-    )
     embed_type = (
         "movie" if media_type == MediaTypes.MOVIE.value else "tv"
     )
+    segments = [str(content_id)]
+    if embed_type == "tv" and season is not None and episode is not None:
+        segments += [str(season), str(episode)]
     domain = settings.VIDSRC_DOMAINS[0]
-    return f"https://{domain}/embed/{embed_type}?imdb={imdb_id}&{'&'.join(options)}"
+    return (
+        f"https://{domain}/embed/{embed_type}/{'/'.join(segments)}"
+        f"?{'&'.join(VIDSRC_PLAYBACK_OPTIONS)}"
+    )
 
 
 @require_GET
@@ -346,7 +363,10 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
         "stream_url": _get_stream_url(current_instance),
         "imdb_id": imdb_id,
         "vsembed_enabled": request.user.vsembed_enabled,
-        "vsembed_url": _build_vsembed_url(imdb_id, media_type),
+        "vsembed_url": _build_vsembed_url(
+            _vidsrc_id(source, media_id, imdb_id),
+            media_type,
+        ),
         "vidsrc_domains": settings.VIDSRC_DOMAINS,
         "search_providers": [
             {"name": p["name"], "url": p["search_url"].replace("{slug}", title_slug)}
@@ -402,6 +422,14 @@ def season_details(request, source, media_id, title, season_number):  # noqa: AR
                 )
 
     imdb_id = _extract_imdb_id(tv_with_seasons_metadata)
+    vidsrc_id = _vidsrc_id(source, media_id, imdb_id)
+    for episode in season_metadata["episodes"]:
+        episode["vsembed_url"] = _build_vsembed_url(
+            vidsrc_id,
+            MediaTypes.TV.value,
+            season_number,
+            episode["episode_number"],
+        )
     title_slug = slugify(tv_with_seasons_metadata.get("title", "")) or tv_with_seasons_metadata.get("title", "")
 
     context = {
@@ -417,7 +445,7 @@ def season_details(request, source, media_id, title, season_number):  # noqa: AR
         "stream_url": _get_stream_url(current_instance),
         "imdb_id": imdb_id,
         "vsembed_enabled": request.user.vsembed_enabled,
-        "vsembed_url": _build_vsembed_url(imdb_id, MediaTypes.TV.value),
+        "vsembed_url": _build_vsembed_url(vidsrc_id, MediaTypes.TV.value),
         "vidsrc_domains": settings.VIDSRC_DOMAINS,
         "search_providers": [
             {"name": p["name"], "url": p["search_url"].replace("{slug}", title_slug)}

@@ -171,9 +171,8 @@ class MediaDetailsViewTests(TestCase):
 
         self.assertContains(
             response,
-            "https://vidsrc.sh/embed/tv?imdb=tt0108778&amp;autoplay=1",
+            'href="https://vidsrc.sh/embed/tv/1668/1/2?autoplay=1&amp;sub_url=',
         )
-        self.assertContains(response, "subtitles.vtt&season=1&episode=2")
         self.assertContains(response, "data-vidsrc-play")
         self.assertNotContains(response, "window.open(")
         self.assertContains(response, 'id="vidsrc-domains"')
@@ -181,41 +180,48 @@ class MediaDetailsViewTests(TestCase):
 
 
 class BuildVsembedUrlTests(TestCase):
-    """Test _build_vsembed_url playback options."""
+    """Test VidSrc embed URL building."""
 
-    def test_movie_url_contains_playback_options(self):
-        """Movie URLs autoplay on the primary VidSrc domain with no subtitles."""
-        url = views._build_vsembed_url("tt0111161", MediaTypes.MOVIE.value)
+    options = "?autoplay=1&sub_url=https://example.invalid/subtitles.vtt"
 
-        self.assertEqual(
-            url,
-            "https://vidsrc.sh/embed/movie?imdb=tt0111161"
-            "&autoplay=1"
-            "&sub_url=https://example.invalid/subtitles.vtt",
-        )
+    def test_movie_url(self):
+        """Movies use /embed/movie/{id} with playback options."""
+        url = views._build_vsembed_url("68721", MediaTypes.MOVIE.value)
 
-    def test_tv_url_contains_playback_options(self):
-        """TV URLs autoplay with no subtitles."""
-        url = views._build_vsembed_url("tt5875444", MediaTypes.TV.value)
+        self.assertEqual(url, "https://vidsrc.sh/embed/movie/68721" + self.options)
 
-        self.assertTrue(
-            url.startswith("https://vidsrc.sh/embed/tv?imdb=tt5875444&"),
-        )
-        self.assertIn("autoplay=1", url)
-        self.assertIn("sub_url=https://example.invalid/subtitles.vtt", url)
+    def test_tv_url(self):
+        """A show without season/episode opens the in-player episode picker."""
+        url = views._build_vsembed_url("1399", MediaTypes.TV.value)
+
+        self.assertEqual(url, "https://vidsrc.sh/embed/tv/1399" + self.options)
+
+    def test_episode_url(self):
+        """Episodes use /embed/tv/{id}/{season}/{episode}."""
+        url = views._build_vsembed_url("1399", MediaTypes.TV.value, 1, 3)
+
+        self.assertEqual(url, "https://vidsrc.sh/embed/tv/1399/1/3" + self.options)
 
     @override_settings(VIDSRC_DOMAINS=["player.example.com", "vidsrc.sh"])
     def test_uses_first_configured_domain(self):
         """The first configured VidSrc domain is used for links."""
-        url = views._build_vsembed_url("tt0111161", MediaTypes.MOVIE.value)
+        url = views._build_vsembed_url("68721", MediaTypes.MOVIE.value)
 
-        self.assertTrue(
-            url.startswith("https://player.example.com/embed/movie?imdb=tt0111161&"),
-        )
+        self.assertTrue(url.startswith("https://player.example.com/embed/movie/68721?"))
 
-    def test_no_imdb_id_returns_none(self):
-        """No IMDb ID means no vsembed URL."""
+    def test_no_id_returns_none(self):
+        """No ID means no VidSrc URL."""
         self.assertIsNone(views._build_vsembed_url(None, MediaTypes.TV.value))
-        self.assertIsNone(
-            views._build_vsembed_url("", MediaTypes.MOVIE.value),
+        self.assertIsNone(views._build_vsembed_url("", MediaTypes.MOVIE.value))
+
+    def test_vidsrc_id_prefers_tmdb_id(self):
+        """TMDB items are looked up by TMDB ID, others fall back to IMDb ID."""
+        self.assertEqual(
+            views._vidsrc_id(Sources.TMDB.value, 1399, "tt0944947"),
+            "1399",
         )
+        self.assertEqual(
+            views._vidsrc_id(Sources.MANUAL.value, "5", "tt0944947"),
+            "tt0944947",
+        )
+        self.assertIsNone(views._vidsrc_id(Sources.MANUAL.value, "5", None))
