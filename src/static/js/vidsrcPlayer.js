@@ -30,12 +30,18 @@
     return domains;
   }
 
+  /** Map an embed URL (path or query format) to its VidSrc info API path. */
   function infoPath(url) {
-    const type = url.pathname.split("/").filter(Boolean).pop();
-    const id = url.searchParams.get("imdb") || url.searchParams.get("tmdb");
+    const parts = url.pathname.split("/").filter(Boolean);
+    const start = parts.indexOf("embed");
+    if (start === -1) return null;
+    let [type, id, season, episode] = parts.slice(start + 1).map(decodeURIComponent);
+    if (!id) {
+      id = url.searchParams.get("imdb") || url.searchParams.get("tmdb");
+      season = url.searchParams.get("season");
+      episode = url.searchParams.get("episode");
+    }
     if (!id || (type !== "movie" && type !== "tv")) return null;
-    const season = url.searchParams.get("season");
-    const episode = url.searchParams.get("episode");
     const suffix = type === "tv" && season && episode ? `/${season}/${episode}` : "";
     return `/info/${type}/${encodeURIComponent(id)}${suffix}.json`;
   }
