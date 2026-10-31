@@ -60,25 +60,29 @@ def _get_stream_url(current_instance):
 
 
 def _build_vsembed_url(imdb_id, media_type):
-    """Build a vsembed.ru streaming URL from an IMDb ID.
+    """Build a VidSrc embed URL from an IMDb ID.
 
-    Playback options (documented at https://vsembed.ru):
-    - ``autoplay=0`` keeps the player paused until the user presses play, so
-      playback starts with sound instead of falling back to muted autoplay.
+    Playback options (documented at https://vsembed.ru/vidsrc/docs/):
+    - ``autoplay=1`` starts playback as soon as the player is opened; the
+      player is embedded with autoplay delegated, so it starts unmuted.
     - ``sub_url`` pointing to an unreachable file claims the auto-applied
-      subtitle slot (it loads first and fails silently), so playback starts
-      without subtitles; tracks stay selectable in the player's CC menu.
+      subtitle slot (it takes precedence over ``ds_lang`` and the viewer's
+      saved language, then fails silently), so playback starts without
+      subtitles; tracks stay selectable in the player's CC menu.
+
+    Uses the query string format so ``&season=N&episode=M`` can be appended.
     """
-    options = (
-        "autoplay=0",
-        "sub_url=https://example.invalid/subtitles.vtt",
-    )
     if not imdb_id:
         return None
+    options = (
+        "autoplay=1",
+        "sub_url=https://example.invalid/subtitles.vtt",
+    )
     embed_type = (
         "movie" if media_type == MediaTypes.MOVIE.value else "tv"
     )
-    return f"https://vsembed.ru/embed/{embed_type}?imdb={imdb_id}&{'&'.join(options)}"
+    domain = settings.VIDSRC_DOMAINS[0]
+    return f"https://{domain}/embed/{embed_type}?imdb={imdb_id}&{'&'.join(options)}"
 
 
 @require_GET
@@ -343,6 +347,7 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
         "imdb_id": imdb_id,
         "vsembed_enabled": request.user.vsembed_enabled,
         "vsembed_url": _build_vsembed_url(imdb_id, media_type),
+        "vidsrc_domains": settings.VIDSRC_DOMAINS,
         "search_providers": [
             {"name": p["name"], "url": p["search_url"].replace("{slug}", title_slug)}
             for p in (request.user.streaming_providers or [])
@@ -413,6 +418,7 @@ def season_details(request, source, media_id, title, season_number):  # noqa: AR
         "imdb_id": imdb_id,
         "vsembed_enabled": request.user.vsembed_enabled,
         "vsembed_url": _build_vsembed_url(imdb_id, MediaTypes.TV.value),
+        "vidsrc_domains": settings.VIDSRC_DOMAINS,
         "search_providers": [
             {"name": p["name"], "url": p["search_url"].replace("{slug}", title_slug)}
             for p in (request.user.streaming_providers or [])
