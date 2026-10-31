@@ -492,7 +492,7 @@ def _apply_time(filters, time):
         filters["with_runtime.lte"] = 45
         return "short episodes"
     if time == "binge":
-        filters["vote_count.gte"] = 500
+        filters["vote_count.gte"] = max(filters["vote_count.gte"], 500)
         return "bingeable"
     return None
 
@@ -509,7 +509,7 @@ def _apply_novelty(filters, novelty, media_type, today):
         return "recent"
     if novelty == "fresh":
         filters["sort_by"] = "vote_average.desc"
-        filters["vote_count.gte"] = max(filters["vote_count.gte"], 80)
+        filters["vote_count.gte"] = 80
         return "off the beaten path"
     return None
 
@@ -541,8 +541,9 @@ def mood_plan(answers, today=None):
         filters["without_genres"] = ",".join(str(gid) for gid in sorted(avoid_ids))
 
     labels = [GENRES[key]["label"] for key in preferred[:3]]
-    labels.append(_apply_time(filters, time))
-    labels.append(_apply_novelty(filters, novelty, media_type, today))
+    # novelty first so the binge vote minimum always wins
+    novelty_label = _apply_novelty(filters, novelty, media_type, today)
+    labels.extend([_apply_time(filters, time), novelty_label])
 
     return {
         "media_type": media_type,

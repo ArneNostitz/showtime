@@ -226,6 +226,11 @@ class MoodPlanTests(TestCase):
         plan = recs.mood_plan({"time": "binge", "novelty": "fresh"})
         self.assertEqual(plan["filters"]["vote_count.gte"], 500)
 
+    def test_fresh_lowers_vote_minimum(self):
+        """Fresh picks outside binge mode include lesser-known titles."""
+        plan = recs.mood_plan({"time": "evening", "novelty": "fresh"})
+        self.assertEqual(plan["filters"]["vote_count.gte"], 80)
+
     def test_classic(self):
         """Classics are limited to releases before 2000."""
         plan = recs.mood_plan({"novelty": "classic"})
