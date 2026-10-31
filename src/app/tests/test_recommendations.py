@@ -221,6 +221,11 @@ class MoodPlanTests(TestCase):
         self.assertEqual(plan["media_type"], "tv")
         self.assertNotIn("27", plan["filters"].get("with_genres", ""))
 
+    def test_binge_fresh_keeps_binge_threshold(self):
+        """Fresh picks don't lower the binge vote-count minimum."""
+        plan = recs.mood_plan({"time": "binge", "novelty": "fresh"})
+        self.assertEqual(plan["filters"]["vote_count.gte"], 500)
+
     def test_classic(self):
         """Classics are limited to releases before 2000."""
         plan = recs.mood_plan({"novelty": "classic"})
@@ -294,6 +299,25 @@ class DiscoverViewTests(RecommendationsTestBase):
         second = self.client.session["discover_recent_picks"][0]
         self.assertNotEqual(picked, second)
 
+    @patch("app.providers.tmdb.discover")
+    def test_surprise_recent_picks_per_type(self, discover, _mock):
+        """A movie pick doesn't hide a TV show with the same TMDB id."""
+        discover.return_value = {
+            "page": 1,
+            "total_pages": 1,
+            "results": [rec(300, media_type="tv")],
+        }
+        session = self.client.session
+        session["discover_recent_picks"] = ["movie:300", "300"]
+        session.save()
+        response = self.client.get(
+            reverse("discover_surprise"), {"genre": "drama", "media_type": "tv"}
+        )
+        self.assertContains(response, "Title 300")
+        self.assertEqual(
+            self.client.session["discover_recent_picks"], ["tv:300", "movie:300"]
+        )
+
     def test_surprise_invalid_genre(self, _mock):
         """Unknown genres return a bad request."""
         response = self.client.get(
@@ -315,6 +339,42 @@ class DiscoverViewTests(RecommendationsTestBase):
         )
         self.assertContains(response, "Your mood pick")
         self.assertContains(response, "Title 400")
+
+    @patch("app.providers.tmdb.discover")
+    def test_mood_shuffle_skips_previous_pick(self, discover, _mock):
+        """Shuffling a mood result gives a different top pick."""
+        discover.return_value = {
+            "page": 1,
+            "total_pages": 1,
+            "results": [rec(400, (35,), score=9), rec(401, (18,), score=5)],
+        }
+        answers = {"feeling": "cheerful", "time": "short"}
+        self.client.get(reverse("discover_mood"), answers)
+        self.client.get(reverse("discover_mood"), answers)
+        self.assertEqual(
+            self.client.session["discover_mood_picks"][:2], ["movie:401", "movie:400"]
+        )
+
+    @patch("app.providers.services.get_media_metadata")
+    def test_inline_watchlist_twice(self, metadata, _mock):
+        """Adding an already tracked title again doesn't duplicate or crash."""
+        metadata.return_value = {"title": "Title 500", "image": "http://x/img.jpg"}
+        for media_type, model in (("movie", Movie), ("tv", TV)):
+            for _ in range(2):
+                response = self.client.post(
+                    reverse("media_save_planning"),
+                    {
+                        "media_id": "500",
+                        "source": Sources.TMDB.value,
+                        "media_type": media_type,
+                        "inline": "1",
+                    },
+                    HTTP_HX_REQUEST="true",
+                )
+                self.assertContains(response, "On your watchlist")
+            self.assertEqual(
+                model.objects.filter(user=self.user, item__media_id="500").count(), 1
+            )
 
     @patch("app.providers.services.get_media_metadata")
     def test_inline_watchlist(self, metadata, _mock):

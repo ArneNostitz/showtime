@@ -509,7 +509,7 @@ def _apply_novelty(filters, novelty, media_type, today):
         return "recent"
     if novelty == "fresh":
         filters["sort_by"] = "vote_average.desc"
-        filters["vote_count.gte"] = 80
+        filters["vote_count.gte"] = max(filters["vote_count.gte"], 80)
         return "off the beaten path"
     return None
 
@@ -553,8 +553,11 @@ def mood_plan(answers, today=None):
     }
 
 
-def mood_recommendations(profile, answers, limit=9, rng=None):
-    """Return a top pick and alternatives for the mood quiz answers."""
+def mood_recommendations(profile, answers, limit=9, rng=None, exclude=()):
+    """Return a top pick and alternatives for the mood quiz answers.
+
+    Titles in `exclude` (recent picks) are skipped unless nothing else is left.
+    """
     rng = rng or random.Random()  # noqa: S311
     plan = mood_plan(answers)
     media_type = plan["media_type"]
@@ -587,7 +590,9 @@ def mood_recommendations(profile, answers, limit=9, rng=None):
         ranked.append({**item, "match": score})
 
     ranked.sort(key=lambda item: item["match"], reverse=True)
-    ranked = ranked[:limit]
+    exclude = {str(media_id) for media_id in exclude}
+    unseen = [item for item in ranked if item["media_id"] not in exclude]
+    ranked = (unseen or ranked)[:limit]
     return {
         "summary": plan["summary"],
         "media_type": media_type,
