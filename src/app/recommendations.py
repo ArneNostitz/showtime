@@ -492,7 +492,7 @@ def _apply_time(filters, time):
         filters["with_runtime.lte"] = 45
         return "short episodes"
     if time == "binge":
-        filters["vote_count.gte"] = 500
+        filters["vote_count.gte"] = max(filters["vote_count.gte"], 500)
         return "bingeable"
     return None
 
@@ -541,8 +541,9 @@ def mood_plan(answers, today=None):
         filters["without_genres"] = ",".join(str(gid) for gid in sorted(avoid_ids))
 
     labels = [GENRES[key]["label"] for key in preferred[:3]]
-    labels.append(_apply_time(filters, time))
-    labels.append(_apply_novelty(filters, novelty, media_type, today))
+    # novelty first so the binge vote minimum always wins
+    novelty_label = _apply_novelty(filters, novelty, media_type, today)
+    labels.extend([_apply_time(filters, time), novelty_label])
 
     return {
         "media_type": media_type,
@@ -553,8 +554,11 @@ def mood_plan(answers, today=None):
     }
 
 
-def mood_recommendations(profile, answers, limit=9, rng=None):
-    """Return a top pick and alternatives for the mood quiz answers."""
+def mood_recommendations(profile, answers, limit=9, rng=None, exclude=()):
+    """Return a top pick and alternatives for the mood quiz answers.
+
+    Titles in `exclude` (recent picks) are skipped unless nothing else is left.
+    """
     rng = rng or random.Random()  # noqa: S311
     plan = mood_plan(answers)
     media_type = plan["media_type"]
@@ -587,7 +591,9 @@ def mood_recommendations(profile, answers, limit=9, rng=None):
         ranked.append({**item, "match": score})
 
     ranked.sort(key=lambda item: item["match"], reverse=True)
-    ranked = ranked[:limit]
+    exclude = {str(media_id) for media_id in exclude}
+    unseen = [item for item in ranked if item["media_id"] not in exclude]
+    ranked = (unseen or ranked)[:limit]
     return {
         "summary": plan["summary"],
         "media_type": media_type,
