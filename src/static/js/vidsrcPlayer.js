@@ -195,11 +195,12 @@
   /** Consume user activation as soon as a click in the player grants it. */
   function startPopupGuard(el) {
     stopPopupGuard();
-    if (!navigator.userActivation || !el.requestFullscreen) return;
+    if (!navigator.userActivation || !el.requestFullscreen || !document.fullscreenEnabled) return;
     popupGuard = setInterval(() => {
-      if (navigator.userActivation.isActive) {
-        el.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
-      }
+      if (!navigator.userActivation.isActive) return;
+      el.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
+      // A request that leaves activation unconsumed can't guard against popups.
+      if (navigator.userActivation.isActive) stopPopupGuard();
     }, ACTIVATION_POLL_MS);
   }
 
