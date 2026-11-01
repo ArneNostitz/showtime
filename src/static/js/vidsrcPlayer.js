@@ -14,6 +14,18 @@
  * fullscreen within the same click, so the browser grants it. The iframe
  * delegates autoplay, letting playback start with sound.
  *
+ * Popup ads: VidSrc refuses to load inside `<iframe sandbox>`, so popups are
+ * blocked by starving them of user activation instead. A click in the player
+ * also activates this (ancestor) page, so while the player is open we poll for
+ * activation and immediately consume it with a fullscreen request, which
+ * consumes it for the whole frame tree. The player's `window.open` calls then
+ * fail the popup blocker's activation check, while playback still works since
+ * it only needs sticky activation. The fullscreen request doubles as a way to
+ * re-enter fullscreen after it was lost.
+ *
+ * If fullscreen is lost because the page lost focus (e.g. an ad tab slipped
+ * through), the player stays open; leaving fullscreen otherwise closes it.
+ *
  * The overlay is attached to <html> rather than <body> so it survives the
  * htmx body swap triggered by the episode "mark as watched" request.
  */
@@ -26,10 +38,13 @@
   }
 
   const PROBE_TIMEOUT_MS = 4000;
+  const ACTIVATION_POLL_MS = 5;
+  const FOCUS_LOSS_GRACE_MS = 250;
   const MISSING_TEXT = "No media yet";
   const lookups = new Map();
   let overlay = null;
   let wasFullscreen = false;
+  let popupGuard = null;
 
   function getDomains(fallbackHost) {
     const el = document.getElementById("vidsrc-domains");
@@ -177,11 +192,28 @@
     overlay.querySelector("[data-vidsrc-status]").textContent = text;
   }
 
+  /** Consume user activation as soon as a click in the player grants it. */
+  function startPopupGuard(el) {
+    stopPopupGuard();
+    if (!navigator.userActivation || !el.requestFullscreen) return;
+    popupGuard = setInterval(() => {
+      if (navigator.userActivation.isActive) {
+        el.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
+      }
+    }, ACTIVATION_POLL_MS);
+  }
+
+  function stopPopupGuard() {
+    if (popupGuard !== null) clearInterval(popupGuard);
+    popupGuard = null;
+  }
+
   function close() {
     if (!overlay) return;
     const el = overlay;
     overlay = null;
     wasFullscreen = false;
+    stopPopupGuard();
     if (document.fullscreenElement && document.exitFullscreen) {
       document.exitFullscreen().catch(() => {});
     }
@@ -240,6 +272,7 @@
     iframe.setAttribute("referrerpolicy", "origin");
     iframe.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;";
     current.insertBefore(iframe, current.firstChild);
+    startPopupGuard(current);
     iframe.focus();
   }
 
@@ -257,7 +290,12 @@
     if (document.fullscreenElement) {
       wasFullscreen = true;
     } else if (wasFullscreen) {
-      close();
+      const current = overlay;
+      setTimeout(() => {
+        if (overlay === current && !document.fullscreenElement && !document.hidden && document.hasFocus()) {
+          close();
+        }
+      }, FOCUS_LOSS_GRACE_MS);
     }
   });
 
