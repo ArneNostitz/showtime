@@ -93,6 +93,7 @@ urlpatterns = [
     path("discover/surprise", views.discover_surprise, name="discover_surprise"),
     path("discover/mood", views.discover_mood, name="discover_mood"),
     path("serviceworker.js", views.service_worker, name="service_worker"),
+    path("play", views.vidsrc_player, name="vidsrc_player"),
     path(
         "streaming-links/<int:item_id>",
         views.edit_streaming_links,

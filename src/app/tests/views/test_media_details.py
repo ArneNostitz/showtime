@@ -123,7 +123,7 @@ class MediaDetailsViewTests(TestCase):
         mock_process_episodes,
         mock_get_metadata,
     ):
-        """Episode thumbnails get a VidSrc play button for the fullscreen player."""
+        """Episode thumbnails get a VidSrc play button that opens the player page."""
         self.user.vsembed_enabled = True
         self.user.save()
         mock_get_metadata.return_value = {
@@ -177,6 +177,7 @@ class MediaDetailsViewTests(TestCase):
         self.assertNotContains(response, "window.open(")
         self.assertContains(response, 'id="vidsrc-domains"')
         self.assertContains(response, "js/vidsrcPlayer.js")
+        self.assertContains(response, f'data-player-url="{reverse("vidsrc_player")}"')
 
 
 class BuildVsembedUrlTests(TestCase):
@@ -225,3 +226,40 @@ class BuildVsembedUrlTests(TestCase):
             "tt0944947",
         )
         self.assertIsNone(views._vidsrc_id(Sources.MANUAL.value, "5", None))
+
+
+class VidsrcPlayerViewTests(TestCase):
+    """Test the standalone VidSrc player page."""
+
+    def setUp(self):
+        """Create a user and log in."""
+        self.credentials = {"username": "test", "password": "12345"}
+        get_user_model().objects.create_user(**self.credentials)
+        self.client.login(**self.credentials)
+
+    @override_settings(VIDSRC_DOMAINS=["vidsrc.sh", "vsembed.ru"])
+    def test_renders_player_for_vidsrc_embed(self):
+        """A VidSrc embed URL renders the player page with the source and mirrors."""
+        src = "https://vsembed.ru/embed/tv/1668/1/2?autoplay=1"
+        response = self.client.get(reverse("vidsrc_player"), {"src": src})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="vidsrc-player-src"')
+        self.assertContains(response, 'id="vidsrc-domains"')
+        self.assertContains(response, "js/vidsrcPlayer.js")
+        self.assertEqual(response.context["src"], src)
+        self.assertContains(response, f'data-home-url="{reverse("home")}"')
+
+    @override_settings(VIDSRC_DOMAINS=["vidsrc.sh"])
+    def test_rejects_non_vidsrc_urls(self):
+        """Only https embed URLs on a configured VidSrc domain are accepted."""
+        for src in (
+            "",
+            "https://evil.example/embed/movie/550",
+            "http://vidsrc.sh/embed/movie/550",
+            "https://vidsrc.sh/admin",
+            "javascript:alert(1)",
+        ):
+            with self.subTest(src=src):
+                response = self.client.get(reverse("vidsrc_player"), {"src": src})
+                self.assertEqual(response.status_code, 400)
