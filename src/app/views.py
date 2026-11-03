@@ -1122,6 +1122,39 @@ DISCOVER_RECENT_PICKS = 30
 
 
 @require_GET
+def person_details(request, person_id):
+    """Show every movie and TV show a person acted in, directed or wrote."""
+    person = tmdb.person(person_id)
+    sections = []
+    for media_type, label, enabled in (
+        (MediaTypes.MOVIE.value, "Movies", request.user.movie_enabled),
+        (MediaTypes.TV.value, "TV shows", request.user.tv_enabled),
+    ):
+        titles = [c for c in person["credits"] if c["media_type"] == media_type]
+        if enabled and titles:
+            sections.append(
+                {
+                    "media_type": media_type,
+                    "title": label,
+                    "items": helpers.enrich_items_with_user_data(
+                        request,
+                        titles,
+                        media_type,
+                    ),
+                },
+            )
+    departments = sorted(
+        {d for credit in person["credits"] for d in credit["departments"]},
+        key=lambda d: (d != person["known_for"], d),
+    )
+    return render(
+        request,
+        "app/person_details.html",
+        {"person": person, "sections": sections, "departments": departments},
+    )
+
+
+@require_GET
 def discover(request):
     """Discover page with personal, surprise and mood based recommendations."""
     profile = recs.build_profile(request.user, fetch=False)

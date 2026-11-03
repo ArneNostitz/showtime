@@ -68,6 +68,14 @@ DISLIKED_SEEDS_PER_TYPE = 5
 RECS_PER_SEED = 20
 MAX_WORKERS = 6
 NEW_TO_YOU_THRESHOLD = 0.15
+# Family and animation titles are only boosted for users who actually watch them
+KIDS_OK_THRESHOLD = 0.25
+TV_KIDS_GENRE = 10762
+SIMILAR_WEIGHT = 0.3
+ENRICH_LIMIT = 40
+MMR_LAMBDA = 0.7
+PERSONAL_MOOD_MATCH = 0.75
+FEATURE_WEIGHTS = {"g": 1.5, "k": 1.0, "p": 2.0, "c": 0.7, "l": 0.5}
 
 
 
@@ -130,16 +138,16 @@ MOOD_QUESTIONS = [
 ]
 
 FEELING_GENRES = {
-    "cheerful": (["comedy", "adventure", "animation", "music"], ["horror"]),
-    "low": (["comedy", "family", "animation", "romance"], ["horror", "war"]),
-    "stressed": (["comedy", "animation", "family"], ["horror", "thriller", "war"]),
+    "cheerful": (["comedy", "adventure", "music", "romance"], ["horror"]),
+    "low": (["comedy", "romance", "drama", "music"], ["horror", "war"]),
+    "stressed": (["comedy", "adventure", "fantasy"], ["horror", "thriller", "war"]),
     "adventurous": (["adventure", "action", "scifi", "fantasy"], []),
     "curious": (["documentary", "mystery", "scifi", "history"], []),
     "romantic": (["romance", "comedy", "drama"], ["horror"]),
     "edgy": (["thriller", "horror", "crime", "mystery"], ["family"]),
 }
 ENERGY_GENRES = {
-    "light": (["comedy", "action", "animation"], ["documentary", "history"]),
+    "light": (["comedy", "action", "adventure"], ["documentary", "history"]),
     "engaged": (["drama", "mystery", "scifi"], []),
 }
 COMPANY_GENRES = {
@@ -168,6 +176,20 @@ class TasteProfile:
     seeds: list
     genre_affinity: dict
     tracked: set
+    features: dict = field(default_factory=dict)
+    creators: dict = field(default_factory=dict)
+    fetch: bool = True
+
+    @property
+    def kids_ok(self):
+        """Return whether the user watches family or animated titles."""
+        return (
+            max(
+                self.genre_affinity.get("family", 0.0),
+                self.genre_affinity.get("animation", 0.0),
+            )
+            >= KIDS_OK_THRESHOLD
+        )
 
     def seeds_for(self, media_type):
         """Return liked seeds of a media type that have TMDB data."""
@@ -232,12 +254,82 @@ def media_weight(media, now=None):
     return weight
 
 
-def _fetch_seed(seed):
+def _title_data(media_type, media_id, *, fetch=True):
+    """Return the cached or fetched TMDB features of a title."""
+    if not fetch:
+        return (
+            tmdb.cache.get(
+                f"{Sources.TMDB.value}_taste_seed_v2_{media_type}_{media_id}",
+            )
+            or {}
+        )
     try:
-        return tmdb.taste_seed(seed.media_type, seed.media_id)
+        return tmdb.taste_seed(media_type, media_id)
     except (services.ProviderAPIError, requests.exceptions.RequestException):
-        logger.warning("Could not load TMDB data for %s", seed.title)
+        logger.warning("Could not load TMDB data for %s %s", media_type, media_id)
         return {}
+
+
+def _fetch_seed(seed):
+    return _title_data(seed.media_type, seed.media_id)
+
+
+def title_features(media_type, data):
+    """Return the sparse content vector of a title.
+
+    Genres, keywords, directors/writers/creators, main cast and language.
+    """
+    vector = {}
+    for key in genre_keys(media_type, data.get("genre_ids")):
+        vector[f"g:{key}"] = FEATURE_WEIGHTS["g"]
+    for keyword in data.get("keywords", [])[:25]:
+        vector[f"k:{keyword}"] = FEATURE_WEIGHTS["k"]
+    for person_id in data.get("creators", {}):
+        vector[f"p:{person_id}"] = FEATURE_WEIGHTS["p"]
+    for person_id in data.get("cast", {}):
+        vector[f"c:{person_id}"] = FEATURE_WEIGHTS["c"]
+    if data.get("language"):
+        vector[f"l:{data['language']}"] = FEATURE_WEIGHTS["l"]
+    return vector
+
+
+def _norm(vector):
+    return math.sqrt(sum(value * value for value in vector.values()))
+
+
+def cosine(a, b):
+    """Return the cosine similarity of two sparse vectors."""
+    if len(a) > len(b):
+        a, b = b, a
+    dot = sum(value * b[key] for key, value in a.items() if key in b)
+    if not dot:
+        return 0.0
+    return dot / (_norm(a) * _norm(b))
+
+
+def _overlap(a, b):
+    """Return the Jaccard overlap of two feature sets (for diversity)."""
+    if not a or not b:
+        return 0.0
+    return len(a.keys() & b.keys()) / len(a.keys() | b.keys())
+
+
+def _taste_vector(seeds):
+    """Return a Rocchio style taste vector and the creators of liked seeds.
+
+    Liked titles add their normalised features, disliked titles subtract them.
+    """
+    features = defaultdict(float)
+    creators = {}
+    for seed in seeds:
+        vector = title_features(seed.media_type, seed.data)
+        length = _norm(vector) or 1
+        for key, value in vector.items():
+            features[key] += seed.weight * value / length
+        if seed.weight > 0:
+            for person_id, name in seed.data.get("creators", {}).items():
+                creators.setdefault(f"p:{person_id}", (name, seed.title))
+    return dict(features), creators
 
 
 def build_profile(user, *, fetch=True):
@@ -283,27 +375,59 @@ def build_profile(user, *, fetch=True):
                 seed.data = data
     else:
         for seed in seeds:
-            seed.data = tmdb.cache.get(
-                f"{Sources.TMDB.value}_taste_seed_{seed.media_type}_{seed.media_id}",
-            ) or {}
+            seed.data = _title_data(seed.media_type, seed.media_id, fetch=False)
 
     affinity = defaultdict(float)
     for seed in seeds:
         for key in genre_keys(seed.media_type, seed.data.get("genre_ids")):
             affinity[key] += seed.weight
+    features, creators = _taste_vector(seeds)
 
     if affinity:
         top = max(abs(value) for value in affinity.values()) or 1
         affinity = {key: value / top for key, value in affinity.items()}
 
-    return TasteProfile(seeds=seeds, genre_affinity=dict(affinity), tracked=tracked)
+    return TasteProfile(
+        seeds=seeds,
+        genre_affinity=dict(affinity),
+        tracked=tracked,
+        features=features,
+        creators=creators,
+        fetch=fetch,
+    )
 
 
 def _quality(item):
-    """Return a 0..1 quality score from the TMDB rating."""
-    if item.get("score_count", 0) < 50:  # noqa: PLR2004
-        return 0.3
-    return min(max((item.get("score", 0) - 5) / 4, 0.0), 1.0)
+    """Return a 0..1 quality score from the Bayesian average TMDB rating.
+
+    Few votes pull the rating towards the global mean (IMDb weighted rating).
+    """
+    votes = item.get("score_count", 0) or 0
+    prior_votes, prior_mean = 300, 6.5
+    rating = (votes * (item.get("score") or 0) + prior_votes * prior_mean) / (
+        votes + prior_votes
+    )
+    return min(max((rating - 5.5) / 3, 0.0), 1.0)
+
+
+def kids_factor(profile, media_type, item):
+    """Down-weight family and animated titles for users who don't watch them."""
+    if profile.kids_ok:
+        return 1.0
+    ids = set(item.get("genre_ids") or [])
+    if ids & {GENRES["family"][media_type], TV_KIDS_GENRE}:
+        return 0.4
+    if GENRES["animation"][media_type] in ids:
+        return 0.75
+    return 1.0
+
+
+def kid_genre_ids(media_type):
+    """Return the TMDB genre ids of family, animation and kids titles."""
+    ids = genre_ids(media_type, ("family", "animation"))
+    if media_type == TV_TYPE:
+        ids.append(TV_KIDS_GENRE)
+    return ids
 
 
 def _because(reasons):
@@ -311,41 +435,129 @@ def _because(reasons):
     return "Because you liked " + " & ".join(titles)
 
 
-def for_you(profile, media_type, limit=18):
-    """Return personalised recommendations of a media type."""
-    candidates = {}
-    for seed in profile.seeds_for(media_type):
-        recommendations = seed.data.get("recommendations", [])[:RECS_PER_SEED]
-        for rank, item in enumerate(recommendations):
-            if profile.is_tracked(media_type, item["media_id"]):
-                continue
-            contribution = seed.weight / math.sqrt(rank + 1)
-            candidate = candidates.setdefault(
-                item["media_id"],
-                {"item": item, "support": 0.0, "reasons": defaultdict(float)},
-            )
-            candidate["support"] += contribution
-            candidate["reasons"][seed.title] += contribution
+def _collaborative_candidates(profile, media_type):
+    """Aggregate TMDB recommendations and similar titles of the seeds.
 
+    Liked seeds add support, disliked seeds subtract it.
+    """
+    candidates = {}
+    for seed in profile.seeds:
+        if seed.media_type != media_type or not seed.data:
+            continue
+        for source, factor in (("recommendations", 1.0), ("similar", SIMILAR_WEIGHT)):
+            for rank, item in enumerate(seed.data.get(source, [])[:RECS_PER_SEED]):
+                if profile.is_tracked(media_type, item["media_id"]):
+                    continue
+                contribution = factor * seed.weight / math.sqrt(rank + 1)
+                candidate = candidates.setdefault(
+                    item["media_id"],
+                    {"item": item, "support": 0.0, "reasons": defaultdict(float)},
+                )
+                candidate["support"] += contribution
+                if contribution > 0:
+                    candidate["reasons"][seed.title] += contribution
+    return {
+        media_id: candidate
+        for media_id, candidate in candidates.items()
+        if candidate["support"] > 0
+    }
+
+
+def _content_scores(profile, media_type, items):
+    """Return content vectors and normalised taste similarity of items.
+
+    The best candidates are enriched with keywords and credits from TMDB.
+    """
+
+    def load(item):
+        return _title_data(media_type, item["media_id"], fetch=profile.fetch)
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        details = list(executor.map(load, items[:ENRICH_LIMIT]))
+
+    vectors = {}
+    for index, item in enumerate(items):
+        data = {"genre_ids": item.get("genre_ids"), "language": item.get("language")}
+        if index < len(details) and details[index]:
+            data = {**data, **details[index]}
+        vectors[item["media_id"]] = title_features(media_type, data)
+
+    similarity = {
+        media_id: cosine(profile.features, vector)
+        for media_id, vector in vectors.items()
+    }
+    top = max(similarity.values(), default=0) or 1
+    if top < 0:
+        top = 1
+    return vectors, {media_id: value / top for media_id, value in similarity.items()}
+
+
+def diversify(items, vectors, limit, lam=MMR_LAMBDA):
+    """Re-rank by Maximal Marginal Relevance so rows don't repeat one niche."""
+    remaining = sorted(items, key=lambda item: item["match"], reverse=True)
+    selected = []
+    while remaining and len(selected) < limit:
+
+        def mmr(item):
+            vector = vectors.get(item["media_id"], {})
+            redundancy = max(
+                (_overlap(vector, vectors.get(s["media_id"], {})) for s in selected),
+                default=0.0,
+            )
+            return lam * item["match"] - (1 - lam) * redundancy
+
+        best = max(remaining, key=mmr)
+        selected.append(best)
+        remaining.remove(best)
+    return selected
+
+
+def _reason(profile, vector, reasons):
+    for key in vector:
+        if key in profile.creators:
+            name, title = profile.creators[key]
+            return f"From {name} ({title})"
+    if reasons:
+        return _because(reasons)
+    return "Matches your taste"
+
+
+def for_you(profile, media_type, limit=18):
+    """Return personalised recommendations of a media type.
+
+    Hybrid ranking: collaborative support from TMDB recommendations of the
+    user's titles, content similarity to their taste vector, and Bayesian
+    quality, followed by MMR diversification.
+    """
+    candidates = _collaborative_candidates(profile, media_type)
     if not candidates:
         return _trending_fallback(profile, media_type, limit)
 
-    top_support = max(candidate["support"] for candidate in candidates.values())
+    pool = sorted(candidates.values(), key=lambda c: c["support"], reverse=True)[:80]
+    vectors, similarity = _content_scores(
+        profile,
+        media_type,
+        [candidate["item"] for candidate in pool],
+    )
+    top_support = pool[0]["support"]
     results = []
-    for candidate in candidates.values():
+    for candidate in pool:
         item = candidate["item"]
-        fit = profile.genre_fit(media_type, item.get("genre_ids"))
+        media_id = item["media_id"]
         score = (
-            0.6 * candidate["support"] / top_support
-            + 0.25 * (fit + 1) / 2
-            + 0.15 * _quality(item)
-        )
+            0.35 * candidate["support"] / top_support
+            + 0.35 * similarity[media_id]
+            + 0.3 * _quality(item)
+        ) * kids_factor(profile, media_type, item)
         results.append(
-            {**item, "match": score, "reason": _because(candidate["reasons"])},
+            {
+                **item,
+                "match": score,
+                "reason": _reason(profile, vectors[media_id], candidate["reasons"]),
+            },
         )
 
-    results.sort(key=lambda item: item["match"], reverse=True)
-    return results[:limit]
+    return diversify(results, vectors, limit)
 
 
 def _trending_fallback(profile, media_type, limit):
@@ -409,6 +621,10 @@ def surprise(
         raise ValueError(msg)
 
     filters = {"with_genres": GENRES[genre][media_type]}
+    if genre not in ("family", "animation") and not profile.kids_ok:
+        filters["without_genres"] = ",".join(
+            str(genre_id) for genre_id in kid_genre_ids(media_type)
+        )
     if hidden_gems:
         filters.update(
             {
@@ -468,19 +684,20 @@ def _mood_genres(answers, media_type):
     avoid = set()
     for mapping, answer, weight in (
         (FEELING_GENRES, answers.get("feeling", "cheerful"), 3),
-        (ENERGY_GENRES, answers.get("energy", "light"), 1),
+        (ENERGY_GENRES, answers.get("energy", "light"), 0.5),
         (COMPANY_GENRES, answers.get("company", "solo"), 1.5),
     ):
         preferred, avoided = mapping.get(answer, ([], []))
-        for key in preferred:
-            points[key] += weight
+        # earlier genres in a mapping define the mood more than later ones
+        for index, key in enumerate(preferred):
+            points[key] += weight * (1 - 0.2 * index)
         avoid.update(avoided)
 
     for key in avoid:
         points.pop(key, None)
     ranked = sorted(points, key=lambda key: -points[key])
     preferred = [key for key in ranked if GENRES[key][media_type] is not None][:4]
-    return preferred, avoid
+    return preferred, avoid, {key: points[key] for key in preferred}
 
 
 def _apply_time(filters, time):
@@ -514,29 +731,33 @@ def _apply_novelty(filters, novelty, media_type, today):
     return None
 
 
-def mood_plan(answers, today=None):
-    """Translate mood quiz answers into TMDB discover filters."""
+def mood_plan(answers, today=None, *, allow_kids=False):
+    """Translate mood quiz answers into TMDB discover filters.
+
+    Family and animated titles are excluded unless the family is watching or
+    the user's history shows they enjoy them.
+    """
     today = today or timezone.localdate()
     time = answers.get("time", "evening")
     novelty = answers.get("novelty", "comfort")
+    family = answers.get("company") == "family"
     media_type = TV_TYPE if time in ("episode", "binge") else MOVIE
-    preferred, avoid = _mood_genres(answers, media_type)
+    preferred, avoid, weights = _mood_genres(answers, media_type)
 
     filters = {
-        "sort_by": "popularity.desc",
+        "sort_by": "vote_count.desc",
         "vote_count.gte": 100 if media_type == TV_TYPE else 200,
         "vote_average.gte": 7.2 if answers.get("energy") == "engaged" else 6.3,
     }
-    required = (
-        ["family", "animation"] if answers.get("company") == "family" else preferred
-    )
+    required = ["family", "animation"] if family else preferred
     if required:
         filters["with_genres"] = "|".join(
             str(genre_id) for genre_id in genre_ids(media_type, required)
         )
-    avoid_ids = set(genre_ids(media_type, avoid)) - set(
-        genre_ids(media_type, required),
-    )
+    avoid_ids = set(genre_ids(media_type, avoid))
+    if not family and not allow_kids:
+        avoid_ids.update(kid_genre_ids(media_type))
+    avoid_ids -= set(genre_ids(media_type, required))
     if avoid_ids:
         filters["without_genres"] = ",".join(str(gid) for gid in sorted(avoid_ids))
 
@@ -549,57 +770,117 @@ def mood_plan(answers, today=None):
         "media_type": media_type,
         "filters": filters,
         "preferred": preferred,
+        "weights": weights,
+        "required": required,
+        "avoid_ids": avoid_ids,
         "novelty": novelty,
         "summary": " · ".join(label for label in labels if label),
     }
 
 
-def mood_recommendations(profile, answers, limit=9, rng=None, exclude=()):
-    """Return a top pick and alternatives for the mood quiz answers.
+def mood_match(plan, item):
+    """Return 0..1 for how strongly a title's genres express the mood."""
+    weights = plan["weights"]
+    if not weights:
+        return 0.0
+    keys = genre_keys(plan["media_type"], item.get("genre_ids"))
+    matched = sum(weights.get(key, 0.0) for key in keys)
+    return min(matched / max(weights.values()), 1.0)
 
-    Titles in `exclude` (recent picks) are skipped unless nothing else is left.
-    """
-    rng = rng or random.Random()  # noqa: S311
-    plan = mood_plan(answers)
+
+def _fits_plan(item, plan):
+    """Return whether a personal candidate respects the mood filters."""
+    filters = plan["filters"]
+    ids = set(item.get("genre_ids") or [])
+    release = item.get("release_date") or ""
+    dates_ok = all(
+        release and (release >= value if key.endswith("gte") else release <= value)
+        for key, value in filters.items()
+        if key.endswith(("date.gte", "date.lte"))
+    )
+    return (
+        dates_ok
+        and not ids & plan["avoid_ids"]
+        and "with_runtime.lte" not in filters
+        and bool(set(genre_keys(plan["media_type"], ids)) & set(plan["required"]))
+        and mood_match(plan, item) >= PERSONAL_MOOD_MATCH
+        and (item.get("score") or 0) >= filters["vote_average.gte"] - 0.3
+    )
+
+
+def _mood_candidates(profile, plan):
+    """Collect discover results and fitting personal picks for a mood plan."""
     media_type = plan["media_type"]
-
     candidates = {}
-    for page in (1, 2):
+    for page in (1, 2, 3):
         try:
             results = tmdb.discover(media_type, plan["filters"], page)
         except (services.ProviderAPIError, requests.exceptions.RequestException):
             break
         for item in results["results"]:
             if not profile.is_tracked(media_type, item["media_id"]):
-                candidates.setdefault(item["media_id"], item)
+                candidates.setdefault(item["media_id"], {"item": item, "support": 0.0})
         if page >= results["total_pages"]:
             break
+    for media_id, candidate in _collaborative_candidates(profile, media_type).items():
+        if _fits_plan(candidate["item"], plan):
+            candidates.setdefault(media_id, candidate)["support"] = candidate["support"]
+    return candidates
 
-    preferred = set(plan["preferred"])
+
+def mood_recommendations(profile, answers, limit=9, rng=None, exclude=()):
+    """Return a top pick and alternatives for the mood quiz.
+
+    Candidates come from TMDB discover for the mood plus the user's personal
+    recommendations that fit the mood. They are ranked by how well the main
+    mood genre matches, taste similarity (inverted for "something new"),
+    quality and personal support, then diversified.
+    Titles in `exclude` (recent picks) are skipped unless nothing else is left.
+    """
+    rng = rng or random.Random()  # noqa: S311
+    plan = mood_plan(answers, allow_kids=profile.kids_ok)
+    media_type = plan["media_type"]
+    family = answers.get("company") == "family"
+    candidates = _mood_candidates(profile, plan)
+
+    pool = sorted(
+        candidates.values(),
+        key=lambda c: c["support"] + mood_match(plan, c["item"]) + _quality(c["item"]),
+        reverse=True,
+    )
+    vectors, similarity = _content_scores(
+        profile,
+        media_type,
+        [candidate["item"] for candidate in pool],
+    )
+    top_support = max((c["support"] for c in pool), default=0) or 1
+
     ranked = []
-    for item in candidates.values():
-        keys = genre_keys(media_type, item.get("genre_ids"))
-        mood_match = len(preferred.intersection(keys)) / max(len(preferred), 1)
-        fit = profile.genre_fit(media_type, item.get("genre_ids"))
-        taste = (1 - fit) / 2 if plan["novelty"] == "fresh" else (fit + 1) / 2
+    for candidate in pool:
+        item = candidate["item"]
+        fit = similarity[item["media_id"]]
+        taste = 1 - max(fit, 0) if plan["novelty"] == "fresh" else fit
         score = (
-            0.4 * _quality(item)
-            + 0.35 * mood_match
+            0.45 * mood_match(plan, item)
             + 0.25 * taste
-            + rng.uniform(0, 0.08)
+            + 0.2 * _quality(item)
+            + 0.1 * candidate["support"] / top_support
+            + rng.uniform(0, 0.05)
         )
+        if not family:
+            score *= kids_factor(profile, media_type, item)
         ranked.append({**item, "match": score})
 
-    ranked.sort(key=lambda item: item["match"], reverse=True)
     exclude = {str(media_id) for media_id in exclude}
     unseen = [item for item in ranked if item["media_id"] not in exclude]
-    ranked = (unseen or ranked)[:limit]
+    ranked = diversify(unseen or ranked, vectors, limit)
     return {
         "summary": plan["summary"],
         "media_type": media_type,
         "pick": ranked[0] if ranked else None,
         "alternatives": ranked[1:],
     }
+
 
 
 def genre_labels(media_type, ids):

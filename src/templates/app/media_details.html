@@ -598,6 +598,23 @@
     </div>
 
     <div class="w-full md:w-3/4">
+      {% if media.crew %}
+        <section class="mb-8">
+          <h2 class="text-xl font-bold mb-4">
+            {% if media_type == MediaTypes.TV.value %}
+              Created by
+            {% else %}
+              Directors & writers
+            {% endif %}
+          </h2>
+          <div class="flex overflow-x-auto gap-x-4 pb-5">
+            {% for cast in media.crew %}
+              {% include "app/components/cast_card.html" with cast=cast %}
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+
       {% if media.cast %}
         <section class="mb-8">
           <h2 class="text-xl font-bold mb-4">Cast</h2>
