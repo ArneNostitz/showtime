@@ -560,6 +560,20 @@ class PersonTests(RecommendationsTestBase):
         self.assertEqual(len(merged), 1)
         self.assertEqual(merged[0]["roles"], ["Cobb", "Director"])
 
+    def test_undated_credits_last(self):
+        """Newest titles come first and undated projects go to the end."""
+        from app.providers import tmdb  # noqa: PLC0415
+
+        merged = tmdb._person_credits(
+            [
+                {"id": 1, "title": "Old", "media_type": "movie", "release_date": "01"},
+                {"id": 2, "title": "TBA", "media_type": "movie", "release_date": ""},
+                {"id": 3, "title": "New", "media_type": "movie", "release_date": "24"},
+            ],
+            [],
+        )
+        self.assertEqual([c["title"] for c in merged], ["New", "Old", "TBA"])
+
     def test_key_crew(self):
         """Directors come before writers and jobs are merged."""
         from app.providers import tmdb  # noqa: PLC0415

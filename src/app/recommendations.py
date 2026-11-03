@@ -804,7 +804,8 @@ def _fits_plan(item, plan):
         and "with_runtime.lte" not in filters
         and bool(set(genre_keys(plan["media_type"], ids)) & set(plan["required"]))
         and mood_match(plan, item) >= PERSONAL_MOOD_MATCH
-        and (item.get("score") or 0) >= filters["vote_average.gte"] - 0.3
+        and (item.get("score") or 0) >= filters["vote_average.gte"]
+        and (item.get("score_count") or 0) >= filters["vote_count.gte"]
     )
 
 

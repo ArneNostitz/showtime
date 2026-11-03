@@ -6,6 +6,7 @@ from pathlib import Path
 from django.apps import apps
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
@@ -740,9 +741,10 @@ def media_save_planning(request):
         },
     )
     model = apps.get_model(app_label="app", model_name=media_type)
-    if not model.objects.filter(item=item, user=request.user).exists():
-        # TV has a unique user/item constraint; a concurrent add may win the race
-        with contextlib.suppress(IntegrityError), transaction.atomic():
+    with contextlib.suppress(IntegrityError), transaction.atomic():
+        # lock the user row so concurrent quick-adds can't both pass the check
+        get_user_model().objects.select_for_update().filter(pk=request.user.pk).first()
+        if not model.objects.filter(item=item, user=request.user).exists():
             model(
                 item=item,
                 user=request.user,

@@ -32,9 +32,10 @@
                     @click="department = 'all'">All</button>
             {% for department in departments %}
               <button type="button"
+                      data-department="{{ department }}"
                       class="px-3 py-1 rounded-full text-sm"
-                      :class="department === '{{ department }}' ? 'bg-indigo-600 text-white' : 'bg-[#2a2f35] text-gray-300 hover:bg-[#343a40]'"
-                      @click="department = '{{ department }}'">{{ department }}</button>
+                      :class="department === $el.dataset.department ? 'bg-indigo-600 text-white' : 'bg-[#2a2f35] text-gray-300 hover:bg-[#343a40]'"
+                      @click="department = $el.dataset.department">{{ department }}</button>
             {% endfor %}
           </div>
         {% endif %}

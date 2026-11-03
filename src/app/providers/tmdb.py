@@ -296,7 +296,7 @@ def enrich_season_with_tv_data(season_data, tv_data, media_id, season_number):
 def fetch_and_cache_seasons(media_id, season_numbers, tv_data):
     """Fetch uncached seasons from API and cache them."""
     url = f"{base_url}/tv/{media_id}"
-    base_append = "recommendations,external_ids,watch/providers"
+    base_append = "recommendations,external_ids,watch/providers,aggregate_credits"
     max_seasons_per_request = 8
     fetched_tv_data = tv_data
     result_data = {}
@@ -1139,6 +1139,10 @@ def _person_credits(cast, crew):
 
     return sorted(
         titles.values(),
-        key=lambda entry: (entry["release_date"] or "9999", entry["popularity"]),
+        key=lambda entry: (
+            bool(entry["release_date"]),
+            entry["release_date"],
+            entry["popularity"],
+        ),
         reverse=True,
     )
