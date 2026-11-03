@@ -11,6 +11,7 @@
   <body style="margin:0;background:#000">
     {{ vidsrc_domains|json_script:"vidsrc-domains" }}
     {{ src|json_script:"vidsrc-player-src" }}
-    <script src="{% static 'js/vidsrcPlayer.js' %}{% get_static_file_mtime 'js/vidsrcPlayer.js' %}"></script>
+    <script src="{% static 'js/vidsrcPlayer.js' %}{% get_static_file_mtime 'js/vidsrcPlayer.js' %}"
+            data-home-url="{% url 'home' %}"></script>
   </body>
 </html>

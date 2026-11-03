@@ -248,6 +248,7 @@ class VidsrcPlayerViewTests(TestCase):
         self.assertContains(response, 'id="vidsrc-domains"')
         self.assertContains(response, "js/vidsrcPlayer.js")
         self.assertEqual(response.context["src"], src)
+        self.assertContains(response, f'data-home-url="{reverse("home")}"')
 
     @override_settings(VIDSRC_DOMAINS=["vidsrc.sh"])
     def test_rejects_non_vidsrc_urls(self):

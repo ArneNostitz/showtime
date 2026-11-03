@@ -36,7 +36,9 @@
   const PROBE_TIMEOUT_MS = 4000;
   const ACTIVATION_POLL_MS = 5;
   const MISSING_TEXT = "No media yet";
-  const PLAYER_URL = (document.currentScript && document.currentScript.dataset.playerUrl) || "";
+  const SCRIPT_DATA = (document.currentScript && document.currentScript.dataset) || {};
+  const PLAYER_URL = SCRIPT_DATA.playerUrl || "";
+  const HOME_URL = SCRIPT_DATA.homeUrl || "/";
   const lookups = new Map();
   let overlay = null;
   let popupGuard = null;
@@ -220,7 +222,7 @@
     }
     window.close();
     setTimeout(() => {
-      if (!window.closed) window.location.assign("/");
+      if (!window.closed) window.location.assign(HOME_URL);
     }, 100);
   }
 
