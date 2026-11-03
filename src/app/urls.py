@@ -87,6 +87,7 @@ urlpatterns = [
         name="search_parent_season",
     ),
     path("statistics", views.statistics, name="statistics"),
+    path("person/<int:person_id>", views.person_details, name="person_details"),
     path("discover", views.discover, name="discover"),
     path("discover/for-you", views.discover_for_you, name="discover_for_you"),
     path("discover/surprise", views.discover_surprise, name="discover_surprise"),

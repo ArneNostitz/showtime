@@ -6,6 +6,7 @@ from pathlib import Path
 from django.apps import apps
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
@@ -740,9 +741,10 @@ def media_save_planning(request):
         },
     )
     model = apps.get_model(app_label="app", model_name=media_type)
-    if not model.objects.filter(item=item, user=request.user).exists():
-        # TV has a unique user/item constraint; a concurrent add may win the race
-        with contextlib.suppress(IntegrityError), transaction.atomic():
+    with contextlib.suppress(IntegrityError), transaction.atomic():
+        # lock the user row so concurrent quick-adds can't both pass the check
+        get_user_model().objects.select_for_update().filter(pk=request.user.pk).first()
+        if not model.objects.filter(item=item, user=request.user).exists():
             model(
                 item=item,
                 user=request.user,
@@ -1119,6 +1121,39 @@ def statistics(request):
 
 
 DISCOVER_RECENT_PICKS = 30
+
+
+@require_GET
+def person_details(request, person_id):
+    """Show every movie and TV show a person acted in, directed or wrote."""
+    person = tmdb.person(person_id)
+    sections = []
+    for media_type, label, enabled in (
+        (MediaTypes.MOVIE.value, "Movies", request.user.movie_enabled),
+        (MediaTypes.TV.value, "TV shows", request.user.tv_enabled),
+    ):
+        titles = [c for c in person["credits"] if c["media_type"] == media_type]
+        if enabled and titles:
+            sections.append(
+                {
+                    "media_type": media_type,
+                    "title": label,
+                    "items": helpers.enrich_items_with_user_data(
+                        request,
+                        titles,
+                        media_type,
+                    ),
+                },
+            )
+    departments = sorted(
+        {d for credit in person["credits"] for d in credit["departments"]},
+        key=lambda d: (d != person["known_for"], d),
+    )
+    return render(
+        request,
+        "app/person_details.html",
+        {"person": person, "sections": sections, "departments": departments},
+    )
 
 
 @require_GET

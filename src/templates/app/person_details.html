@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load app_tags %}
+
+{% block title %}
+  {{ person.name }} - Yamtrack
+{% endblock title %}
+
+{% block content %}
+  <div class="space-y-8" x-data="{ department: 'all' }">
+    <div class="flex flex-col sm:flex-row gap-6">
+      <img alt="{{ person.name }}"
+           class="lazyload w-44 aspect-2/3 rounded-lg shadow-lg bg-[#3e454d] shrink-0 {% if person.image != IMG_NONE %}object-cover{% endif %}"
+           src="{{ IMG_NONE }}"
+           data-src="{{ person.image }}">
+      <div class="space-y-2">
+        <h1 class="text-3xl font-bold">{{ person.name }}</h1>
+        <div class="text-sm text-gray-400 space-x-3">
+          {% if person.known_for %}<span>Known for {{ person.known_for }}</span>{% endif %}
+          {% if person.birthday %}
+            <span>Born {{ person.birthday }}{% if person.place_of_birth %} in {{ person.place_of_birth }}{% endif %}</span>
+          {% endif %}
+          {% if person.deathday %}<span>Died {{ person.deathday }}</span>{% endif %}
+        </div>
+        {% if person.biography %}
+          <p class="text-sm text-gray-300 max-w-4xl line-clamp-4">{{ person.biography }}</p>
+        {% endif %}
+        {% if departments|length > 1 %}
+          <div class="flex flex-wrap gap-2 pt-2">
+            <button type="button"
+                    class="px-3 py-1 rounded-full text-sm"
+                    :class="department === 'all' ? 'bg-indigo-600 text-white' : 'bg-[#2a2f35] text-gray-300 hover:bg-[#343a40]'"
+                    @click="department = 'all'">All</button>
+            {% for department in departments %}
+              <button type="button"
+                      data-department="{{ department }}"
+                      class="px-3 py-1 rounded-full text-sm"
+                      :class="department === $el.dataset.department ? 'bg-indigo-600 text-white' : 'bg-[#2a2f35] text-gray-300 hover:bg-[#343a40]'"
+                      @click="department = $el.dataset.department">{{ department }}</button>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {% for section in sections %}
+      <section>
+        <h2 class="text-xl font-bold mb-4">{{ section.title }} <span class="text-sm font-normal text-gray-400">({{ section.items|length }})</span></h2>
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
+          {% for result in section.items %}
+            <div data-departments="{{ result.item.departments|join:'|' }}"
+                 x-show="department === 'all' || $el.dataset.departments.split('|').includes(department)">
+              {% include "app/components/media_card.html" with item=result.item title=result.item.title media=result.media %}
+              <div class="mt-1 px-1 text-xs text-gray-400 line-clamp-2"
+                   title="{{ result.item.roles|join:', ' }}">
+                {% if result.item.year %}{{ result.item.year }} · {% endif %}{{ result.item.roles|join:", " }}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    {% empty %}
+      <p class="text-gray-400">No movies or TV shows found for {{ person.name }}.</p>
+    {% endfor %}
+  </div>
+{% endblock content %}

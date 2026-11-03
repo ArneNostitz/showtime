@@ -238,6 +238,7 @@ def movie(media_id):
             },
             "cast": filtered_cast,
             "total_cast_count": len(cast),
+            "crew": get_key_crew(response.get("credits", {}).get("crew", [])),
             "related": {
                 collection_response.get("name", "collection"): collection_items,
                 "recommendations": get_related(
@@ -295,7 +296,7 @@ def enrich_season_with_tv_data(season_data, tv_data, media_id, season_number):
 def fetch_and_cache_seasons(media_id, season_numbers, tv_data):
     """Fetch uncached seasons from API and cache them."""
     url = f"{base_url}/tv/{media_id}"
-    base_append = "recommendations,external_ids,watch/providers"
+    base_append = "recommendations,external_ids,watch/providers,aggregate_credits"
     max_seasons_per_request = 8
     fetched_tv_data = tv_data
     result_data = {}
@@ -399,7 +400,9 @@ def tv(media_id):
         url = f"{base_url}/tv/{media_id}"
         params = {
             **base_params,
-            "append_to_response": "recommendations,external_ids,watch/providers,videos",
+            "append_to_response": (
+                "recommendations,external_ids,watch/providers,videos,aggregate_credits"
+            ),
         }
 
         try:
@@ -465,7 +468,61 @@ def process_tv(response):
         "next_episode_season": next_episode["season_number"] if next_episode else None,
         "providers": response.get("watch/providers", {}).get("results", {}),
         "trailer": get_trailer(response.get("videos", {}).get("results", [])),
+        **get_tv_credits(response),
     }
+
+
+def get_key_crew(crew):
+    """Return the directors and writers of a movie."""
+    jobs = {"Director": 0, "Screenplay": 1, "Writer": 1, "Story": 2, "Novel": 2}
+    people = {}
+    for member in crew:
+        job = member.get("job")
+        if job not in jobs:
+            continue
+        person = people.setdefault(
+            member["id"],
+            {
+                "id": member["id"],
+                "name": member.get("name"),
+                "image": get_image_url(member.get("profile_path")),
+                "jobs": [],
+                "rank": jobs[job],
+            },
+        )
+        person["rank"] = min(person["rank"], jobs[job])
+        if job not in person["jobs"]:
+            person["jobs"].append(job)
+    ranked = sorted(people.values(), key=lambda person: person["rank"])[:8]
+    return [
+        {**person, "character": ", ".join(person["jobs"])} for person in ranked
+    ]
+
+
+def get_tv_credits(response):
+    """Return the cast and creators of a TV show."""
+    cast = response.get("aggregate_credits", {}).get("cast", [])
+    filtered_cast = []
+    for member in cast[:30]:
+        roles = member.get("roles") or [{}]
+        filtered_cast.append(
+            {
+                "id": member.get("id"),
+                "name": member.get("name"),
+                "character": roles[0].get("character"),
+                "image": get_image_url(member.get("profile_path")),
+            },
+        )
+    crew = [
+        {
+            "id": creator.get("id"),
+            "name": creator.get("name"),
+            "character": "Creator",
+            "image": get_image_url(creator.get("profile_path")),
+        }
+        for creator in response.get("created_by", [])
+    ]
+    return {"cast": filtered_cast, "total_cast_count": len(cast), "crew": crew}
 
 
 def process_season(response, providers_response):
@@ -893,18 +950,23 @@ def format_discover_result(media, media_type):
         "score_count": media.get("vote_count") or 0,
         "popularity": media.get("popularity") or 0,
         "year": release[:4],
+        "release_date": release,
+        "language": media.get("original_language") or "",
         "synopsis": media.get("overview") or "",
     }
 
 
 def taste_seed(media_type, media_id):
-    """Return the genres and recommendations for a title the user tracked."""
-    cache_key = f"{Sources.TMDB.value}_taste_seed_{media_type}_{media_id}"
+    """Return the content features and recommendations of a title."""
+    cache_key = f"{Sources.TMDB.value}_taste_seed_v2_{media_type}_{media_id}"
     data = cache.get(cache_key)
 
     if data is None:
         url = f"{base_url}/{media_type}/{media_id}"
-        params = {**base_params, "append_to_response": "recommendations"}
+        params = {
+            **base_params,
+            "append_to_response": "recommendations,similar,keywords,credits",
+        }
 
         try:
             response = services.api_request(
@@ -916,11 +978,32 @@ def taste_seed(media_type, media_id):
         except requests.exceptions.HTTPError as error:
             handle_error(error)
 
+        keywords = response.get("keywords", {})
+        cast_crew = response.get("credits", {})
+        creators = response.get("created_by", []) + [
+            member
+            for member in cast_crew.get("crew", [])
+            if member.get("job") in ("Director", "Screenplay", "Writer")
+        ]
         data = {
             "genre_ids": [genre["id"] for genre in response.get("genres", [])],
+            "keywords": [
+                keyword["id"]
+                for keyword in keywords.get("keywords", keywords.get("results", []))
+            ],
+            "creators": {str(member["id"]): member["name"] for member in creators},
+            "cast": {
+                str(member["id"]): member["name"]
+                for member in cast_crew.get("cast", [])[:6]
+            },
+            "language": response.get("original_language") or "",
             "recommendations": [
                 format_discover_result(media, media_type)
                 for media in response.get("recommendations", {}).get("results", [])
+            ],
+            "similar": [
+                format_discover_result(media, media_type)
+                for media in response.get("similar", {}).get("results", [])
             ],
         }
         cache.set(cache_key, data, int(timedelta(days=7).total_seconds()))
@@ -990,3 +1073,76 @@ def trending(media_type):
         cache.set(cache_key, data, int(timedelta(hours=12).total_seconds()))
 
     return data
+
+
+def person(person_id):
+    """Return a person's details and their movie and TV credits."""
+    cache_key = f"{Sources.TMDB.value}_person_{person_id}"
+    data = cache.get(cache_key)
+
+    if data is None:
+        url = f"{base_url}/person/{person_id}"
+        params = {**base_params, "append_to_response": "combined_credits"}
+
+        try:
+            response = services.api_request(
+                Sources.TMDB.value,
+                "GET",
+                url,
+                params=params,
+            )
+        except requests.exceptions.HTTPError as error:
+            handle_error(error)
+
+        combined = response.get("combined_credits", {})
+        data = {
+            "id": response["id"],
+            "name": response.get("name"),
+            "image": get_image_url(response.get("profile_path")),
+            "biography": response.get("biography") or "",
+            "known_for": response.get("known_for_department") or "",
+            "birthday": response.get("birthday"),
+            "deathday": response.get("deathday"),
+            "place_of_birth": response.get("place_of_birth"),
+            "credits": _person_credits(
+                combined.get("cast", []),
+                combined.get("crew", []),
+            ),
+        }
+        cache.set(cache_key, data, int(timedelta(days=1).total_seconds()))
+
+    return data
+
+
+def _person_credits(cast, crew):
+    """Merge a person's credits into one entry per title with all their roles."""
+    titles = {}
+    for credit, role, department in [
+        *((credit, credit.get("character"), "Acting") for credit in cast),
+        *((credit, credit.get("job"), credit.get("department")) for credit in crew),
+    ]:
+        media_type = credit.get("media_type")
+        if media_type not in (MediaTypes.MOVIE.value, MediaTypes.TV.value):
+            continue
+        key = (media_type, credit["id"])
+        if key not in titles:
+            titles[key] = {
+                **format_discover_result(credit, media_type),
+                "roles": [],
+                "departments": [],
+            }
+        entry = titles[key]
+        if role and role not in entry["roles"]:
+            entry["roles"].append(role)
+        if department and department not in entry["departments"]:
+            entry["departments"].append(department)
+
+    return sorted(
+        titles.values(),
+        key=lambda entry: (
+            bool(entry["release_date"]),
+            entry["release_date"],
+            entry["popularity"],
+        ),
+        reverse=True,
+    )
