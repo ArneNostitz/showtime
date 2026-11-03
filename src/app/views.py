@@ -1,6 +1,7 @@
 import logging
 import re
 from pathlib import Path
+from urllib.parse import urlparse
 
 from django.apps import apps
 from django.conf import settings
@@ -1209,6 +1210,21 @@ def discover_mood(request):
 
     context = {"result": result, "again_url": request.get_full_path()}
     return render(request, "app/components/discover_mood.html", context)
+
+
+@require_GET
+def vidsrc_player(request):
+    """Render the standalone VidSrc player page for an embed URL."""
+    src = request.GET.get("src", "")
+    url = urlparse(src)
+    if (
+        url.scheme != "https"
+        or url.hostname not in settings.VIDSRC_DOMAINS
+        or not url.path.startswith("/embed/")
+    ):
+        return HttpResponseBadRequest("Invalid VidSrc embed URL")
+    context = {"src": src, "vidsrc_domains": settings.VIDSRC_DOMAINS}
+    return render(request, "app/vidsrc_player.html", context)
 
 
 @require_GET

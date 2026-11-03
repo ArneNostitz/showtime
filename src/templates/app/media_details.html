@@ -819,6 +819,7 @@
 {% block js %}
   {% if vsembed_enabled and vsembed_url %}
     {{ vidsrc_domains|json_script:"vidsrc-domains" }}
-    <script src="{% static 'js/vidsrcPlayer.js' %}{% get_static_file_mtime 'js/vidsrcPlayer.js' %}"></script>
+    <script src="{% static 'js/vidsrcPlayer.js' %}{% get_static_file_mtime 'js/vidsrcPlayer.js' %}"
+            data-player-url="{% url 'vidsrc_player' %}"></script>
   {% endif %}
 {% endblock js %}

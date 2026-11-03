@@ -10,9 +10,11 @@
  * (read from the `vidsrc-domains` JSON script) is tried in order and the first
  * reachable mirror is used.
  *
- * Clicking a link opens its embed URL in a full-viewport overlay and requests
- * fullscreen within the same click, so the browser grants it. The iframe
- * delegates autoplay, letting playback start with sound.
+ * Checked links are pointed at Showtime's own player page (the
+ * `data-player-url` of this script, `?src=<embed URL>`), which always opens in
+ * a new tab so ad popups can't take the player down with the page. There the
+ * embed URL is shown in a full-viewport overlay on the first reachable mirror;
+ * the iframe delegates autoplay, letting playback start with sound.
  *
  * Popup ads: VidSrc refuses to load inside `<iframe sandbox>`, so popups are
  * blocked by starving them of user activation instead. A click in the player
@@ -20,14 +22,8 @@
  * activation and immediately consume it with a fullscreen request, which
  * consumes it for the whole frame tree. The player's `window.open` calls then
  * fail the popup blocker's activation check, while playback still works since
- * it only needs sticky activation. The fullscreen request doubles as a way to
- * re-enter fullscreen after it was lost.
- *
- * If fullscreen is lost because the page lost focus (e.g. an ad tab slipped
- * through), the player stays open; leaving fullscreen otherwise closes it.
- *
- * The overlay is attached to <html> rather than <body> so it survives the
- * htmx body swap triggered by the episode "mark as watched" request.
+ * it only needs sticky activation. The fullscreen request doubles as the way
+ * the player enters (or re-enters) fullscreen.
  */
 (function () {
   "use strict";
@@ -39,11 +35,10 @@
 
   const PROBE_TIMEOUT_MS = 4000;
   const ACTIVATION_POLL_MS = 5;
-  const FOCUS_LOSS_GRACE_MS = 250;
   const MISSING_TEXT = "No media yet";
+  const PLAYER_URL = (document.currentScript && document.currentScript.dataset.playerUrl) || "";
   const lookups = new Map();
   let overlay = null;
-  let wasFullscreen = false;
   let popupGuard = null;
 
   function getDomains(fallbackHost) {
@@ -177,12 +172,16 @@
     for (const link of links) {
       link.setAttribute("data-vidsrc-checked", "");
       link.style.visibility = "hidden";
-      availability(new URL(link.href, window.location.href)).then((result) => {
+      const src = new URL(link.href, window.location.href);
+      availability(src).then((result) => {
         if (result.status === "missing") {
           markMissing(link);
-        } else {
-          link.style.visibility = "";
+          return;
         }
+        if (PLAYER_URL) {
+          link.href = `${PLAYER_URL}?src=${encodeURIComponent(src.toString())}`;
+        }
+        link.style.visibility = "";
       });
     }
   }
@@ -196,11 +195,15 @@
   function startPopupGuard(el) {
     stopPopupGuard();
     if (!navigator.userActivation || !el.requestFullscreen || !document.fullscreenEnabled) return;
+    let pending = false;
     popupGuard = setInterval(() => {
-      if (!navigator.userActivation.isActive) return;
-      el.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
-      // A request that leaves activation unconsumed can't guard against popups.
-      if (navigator.userActivation.isActive) stopPopupGuard();
+      if (pending || !navigator.userActivation.isActive) return;
+      pending = true;
+      el.requestFullscreen({ navigationUI: "hide" })
+        .catch(() => {})
+        .finally(() => {
+          pending = false;
+        });
     }, ACTIVATION_POLL_MS);
   }
 
@@ -209,16 +212,16 @@
     popupGuard = null;
   }
 
+  /** Leave the player: close its tab, or go home if the browser won't let us. */
   function close() {
-    if (!overlay) return;
-    const el = overlay;
-    overlay = null;
-    wasFullscreen = false;
     stopPopupGuard();
     if (document.fullscreenElement && document.exitFullscreen) {
       document.exitFullscreen().catch(() => {});
     }
-    el.remove();
+    window.close();
+    setTimeout(() => {
+      if (!window.closed) window.location.assign("/");
+    }, 100);
   }
 
   function buildOverlay() {
@@ -248,18 +251,13 @@
   }
 
   async function open(href) {
-    close();
+    if (overlay) return;
     const url = new URL(href, window.location.href);
     overlay = buildOverlay();
     const current = overlay;
-    document.documentElement.appendChild(current);
-
-    if (current.requestFullscreen) {
-      current.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
-    }
+    document.body.appendChild(current);
 
     const result = await availability(url);
-    if (overlay !== current) return;
     if (result.status === "missing") {
       showMessage("This title is not available on VidSrc yet.");
       return;
@@ -277,35 +275,25 @@
     iframe.focus();
   }
 
+  // Episode play links also carry an htmx "mark as watched" request, and htmx
+  // cancels the native navigation of links it handles, so open the tab here.
   document.addEventListener("click", (event) => {
     const link = event.target.closest && event.target.closest("a[data-vidsrc-play]");
     if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
       return;
     }
     event.preventDefault();
-    open(link.href);
-  });
-
-  document.addEventListener("fullscreenchange", () => {
-    if (!overlay) return;
-    if (document.fullscreenElement) {
-      wasFullscreen = true;
-    } else if (wasFullscreen) {
-      const current = overlay;
-      setTimeout(() => {
-        if (overlay === current && !document.fullscreenElement && !document.hidden && document.hasFocus()) {
-          close();
-        }
-      }, FOCUS_LOSS_GRACE_MS);
-    }
-  });
-
-  document.addEventListener("keydown", (event) => {
-    if (overlay && event.key === "Escape" && !document.fullscreenElement) close();
+    window.open(link.href, "_blank", "noopener");
   });
 
   document.addEventListener("htmx:load", (event) => scan(event.detail && event.detail.elt));
 
   window.vidsrcPlayer = { open, close, scan };
-  scan(document);
+
+  const standaloneSrc = document.getElementById("vidsrc-player-src");
+  if (standaloneSrc) {
+    open(JSON.parse(standaloneSrc.textContent));
+  } else {
+    scan(document);
+  }
 })();

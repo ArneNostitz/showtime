@@ -1,0 +1,16 @@
+{% load static %}
+{% load app_tags %}
+
+<!DOCTYPE html>
+<html lang="en" style="background:#000">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player · Showtimes</title>
+  </head>
+  <body style="margin:0;background:#000">
+    {{ vidsrc_domains|json_script:"vidsrc-domains" }}
+    {{ src|json_script:"vidsrc-player-src" }}
+    <script src="{% static 'js/vidsrcPlayer.js' %}{% get_static_file_mtime 'js/vidsrcPlayer.js' %}"></script>
+  </body>
+</html>
