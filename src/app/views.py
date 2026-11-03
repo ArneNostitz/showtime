@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import re
 from pathlib import Path
@@ -7,7 +8,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.core.cache import cache
 from django.core.paginator import Paginator
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import prefetch_related_objects
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -739,12 +740,14 @@ def media_save_planning(request):
         },
     )
     model = apps.get_model(app_label="app", model_name=media_type)
-    instance = model(
-        item=item,
-        user=request.user,
-        status=config.Status.PLANNING.value,
-    )
-    instance.save()
+    if not model.objects.filter(item=item, user=request.user).exists():
+        # TV has a unique user/item constraint; a concurrent add may win the race
+        with contextlib.suppress(IntegrityError), transaction.atomic():
+            model(
+                item=item,
+                user=request.user,
+                status=config.Status.PLANNING.value,
+            ).save()
 
     if request.headers.get("HX-Request") and request.POST.get("inline"):
         return render(request, "app/components/discover_added.html")
@@ -1164,6 +1167,27 @@ def discover_for_you(request):
     return render(request, "app/components/discover_for_you.html", context)
 
 
+def _recent_picks(request, session_key, media_type):
+    """Return the recently picked TMDB ids of one media type."""
+    prefix = f"{media_type}:"
+    return [
+        pick.removeprefix(prefix)
+        for pick in request.session.get(session_key, [])
+        if str(pick).startswith(prefix)
+    ]
+
+
+def _remember_pick(request, session_key, pick):
+    """Store a pick as `media_type:media_id` so it isn't suggested again soon."""
+    key = f"{pick['media_type']}:{pick['media_id']}"
+    recent = [
+        value
+        for value in request.session.get(session_key, [])
+        if ":" in str(value) and value != key
+    ]
+    request.session[session_key] = [key, *recent][:DISCOVER_RECENT_PICKS]
+
+
 @require_GET
 def discover_surprise(request):
     """Return a random pick in a genre the user may not know yet."""
@@ -1171,7 +1195,7 @@ def discover_surprise(request):
     if media_type is None:
         return HttpResponseBadRequest("Unsupported media type")
 
-    recent = request.session.get("discover_recent_picks", [])
+    session_key = "discover_recent_picks"
     profile = recs.build_profile(request.user, fetch=False)
     try:
         result = recs.surprise(
@@ -1179,14 +1203,13 @@ def discover_surprise(request):
             request.GET.get("genre", "random"),
             media_type,
             hidden_gems=request.GET.get("hidden_gems") == "on",
-            exclude=recent,
+            exclude=_recent_picks(request, session_key, media_type),
         )
     except ValueError as error:
         return HttpResponseBadRequest(str(error))
 
     if result["pick"]:
-        recent = [result["pick"]["media_id"], *recent][:DISCOVER_RECENT_PICKS]
-        request.session["discover_recent_picks"] = recent
+        _remember_pick(request, session_key, result["pick"])
         _with_genre_labels([result["pick"], *result["alternatives"]])
 
     context = {"result": result, "again_url": request.get_full_path()}
@@ -1202,9 +1225,16 @@ def discover_mood(request):
         if request.GET.get(question["key"])
         in {option["value"] for option in question["options"]}
     }
+    session_key = "discover_mood_picks"
+    media_type = recs.mood_plan(answers)["media_type"]
     profile = recs.build_profile(request.user)
-    result = recs.mood_recommendations(profile, answers)
+    result = recs.mood_recommendations(
+        profile,
+        answers,
+        exclude=_recent_picks(request, session_key, media_type),
+    )
     if result["pick"]:
+        _remember_pick(request, session_key, result["pick"])
         _with_genre_labels([result["pick"], *result["alternatives"]])
 
     context = {"result": result, "again_url": request.get_full_path()}
