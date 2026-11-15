@@ -29,7 +29,7 @@
               On desktop, the overlay will still appear when you hover your mouse over media cards.
             </p>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer ml-4">
+          <label class="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
             <input class="sr-only peer"
                    type="checkbox"
                    name="clickable_media_cards"
@@ -50,7 +50,7 @@
             </div>
             <p class="text-xs text-gray-400 ml-7">When enabled, unseen episode images and descriptions will be blurred.</p>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer ml-4">
+          <label class="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
             <input class="sr-only peer"
                    type="checkbox"
                    name="obfuscate_unseen_episodes"
@@ -95,7 +95,7 @@
               Display a progress bar on media items. Items which don't have max progress will be using a dotted line.
             </p>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer ml-4">
+          <label class="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
             <input class="sr-only peer"
                    type="checkbox"
                    name="progress_bar"
@@ -118,7 +118,7 @@
               Hide media you've already completed from the recommendations section on detail pages.
             </p>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer ml-4">
+          <label class="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
             <input class="sr-only peer"
                    type="checkbox"
                    name="hide_completed_recommendations"
@@ -139,7 +139,7 @@
             </div>
             <p class="text-xs text-gray-400 ml-7">Hide the rating badge from media cards when the rating is zero.</p>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer ml-4">
+          <label class="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
             <input class="sr-only peer"
                    type="checkbox"
                    name="hide_zero_rating"
@@ -231,7 +231,7 @@
                 {% icon media_type is_active=False %}
                 <span class="text-gray-200 text-sm ml-2">{{ media_type|media_type_readable_plural }}</span>
               </div>
-              <label class="relative inline-flex items-center cursor-pointer">
+              <label class="relative inline-flex items-center cursor-pointer shrink-0">
                 {% with enabled_field=media_type|add:"_enabled" %}
                   <input class="sr-only peer"
                          type="checkbox"
