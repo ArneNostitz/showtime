@@ -631,6 +631,8 @@ class MediaManager(models.Manager):
             item__media_type=MediaTypes.SEASON.value,
             item__season_number__gt=0,
             datetime__lte=timezone.now(),
+            # Episodes without an air date are stored at datetime.min.
+            datetime__year__gt=1,
             content_number__isnull=False,
         ).values(
             "item__media_id",

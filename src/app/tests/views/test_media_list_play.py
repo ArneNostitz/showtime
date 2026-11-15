@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -140,6 +140,22 @@ class ListPlayNextTests(TestCase):
         self.assertEqual(by_id[self.new_tv.id].next_episode["episode"], 3)
         self.assertIsNone(by_id[self.caught_up_tv.id].next_episode)
         self.assertIsNone(by_id[self.caught_up_tv.id].newest_unwatched_at)
+
+    def test_undated_episode_is_not_next(self):
+        """Episodes without an air date aren't treated as released."""
+        season_item = Item.objects.get(
+            media_id="300",
+            media_type=MediaTypes.SEASON.value,
+        )
+        Event.objects.filter(item=season_item, content_number=2).update(
+            datetime=datetime.min.replace(tzinfo=UTC),
+        )
+
+        tv_list = self._tv_list(MediaSortChoices.TITLE)
+        BasicMedia.objects.annotate_next_episode(tv_list)
+
+        caught_up = next(tv for tv in tv_list if tv.id == self.caught_up_tv.id)
+        self.assertIsNone(caught_up.next_episode)
 
     @patch("app.vidsrc.tv_episode_ranges")
     def test_newest_unwatched_sort(self, mock_ranges):
