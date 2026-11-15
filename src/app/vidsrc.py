@@ -10,6 +10,8 @@ from django.core.cache import cache
 logger = logging.getLogger(__name__)
 
 CACHE_TIMEOUT = 60 * 60
+UNKNOWN_CACHE_TIMEOUT = 5 * 60
+UNKNOWN = "unknown"
 REQUEST_TIMEOUT = 4
 MAX_WORKERS = 8
 
@@ -66,7 +68,8 @@ def tv_episode_ranges(tmdb_ids):
     for tmdb_id in tmdb_ids:
         key = _cache_key(tmdb_id)
         if key in cached:
-            result[tmdb_id] = cached[key]
+            if cached[key] != UNKNOWN:
+                result[tmdb_id] = cached[key]
         else:
             to_fetch.append(tmdb_id)
 
@@ -78,6 +81,8 @@ def tv_episode_ranges(tmdb_ids):
                 strict=True,
             ):
                 if ranges is None:
+                    # Don't retry an unreachable VidSrc on every page load.
+                    cache.set(_cache_key(tmdb_id), UNKNOWN, UNKNOWN_CACHE_TIMEOUT)
                     continue
                 cache.set(_cache_key(tmdb_id), ranges, CACHE_TIMEOUT)
                 result[tmdb_id] = ranges

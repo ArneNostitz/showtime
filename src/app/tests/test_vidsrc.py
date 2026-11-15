@@ -36,7 +36,9 @@ class VidsrcAvailabilityTests(TestCase):
 
     @patch("app.vidsrc.requests.get")
     def test_unknown_availability_is_left_out(self, mock_get):
-        """Network errors don't mark a show as unavailable."""
+        """Network errors don't mark a show unavailable and aren't retried at once."""
         mock_get.side_effect = vidsrc.requests.ConnectionError
 
         self.assertEqual(vidsrc.tv_episode_ranges(["1399"]), {})
+        self.assertEqual(vidsrc.tv_episode_ranges(["1399"]), {})
+        self.assertEqual(mock_get.call_count, 1)
