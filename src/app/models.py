@@ -27,6 +27,7 @@ from simple_history.models import HistoricalRecords
 from simple_history.utils import bulk_create_with_history, bulk_update_with_history
 
 import app
+import app.vidsrc
 import events
 import users
 from app import providers
@@ -254,9 +255,31 @@ class MediaManager(models.Manager):
         queryset = queryset.select_related("item")
         queryset = self._apply_prefetch_related(queryset, media_type)
 
+        if sort_filter == users.models.MediaSortChoices.NEWEST_UNWATCHED:
+            if media_type == MediaTypes.TV.value:
+                return self._sort_tv_newest_unwatched(queryset, user)
+            sort_filter = users.models.MediaSortChoices.SCORE
+
         if sort_filter:
             return self._sort_media_list(queryset, sort_filter, media_type)
         return queryset
+
+    def _sort_tv_newest_unwatched(self, queryset, user):
+        """Sort shows by their newest released episode the user hasn't reached.
+
+        With VidSrc enabled only episodes VidSrc has count, so a show moves up
+        front once its new episode is actually playable.
+        """
+        tv_list = list(queryset)
+        self.annotate_next_episode(tv_list, check_vidsrc=user.vsembed_enabled)
+        tv_list.sort(key=lambda tv: tv.item.title.lower())
+        tv_list.sort(
+            key=lambda tv: (
+                tv.newest_unwatched_at.timestamp() if tv.newest_unwatched_at else 0
+            ),
+            reverse=True,
+        )
+        return tv_list
 
     def _apply_prefetch_related(self, queryset, media_type):
         """Apply appropriate prefetch_related based on media type."""
@@ -333,8 +356,9 @@ class MediaManager(models.Manager):
             queryset = queryset.annotate(
                 # Count episodes in regular seasons (season_number > 0)
                 calculated_progress=models.Count(
-                    "seasons__episodes",
+                    "seasons__episodes__item",
                     filter=models.Q(seasons__item__season_number__gt=0),
+                    distinct=True,
                 ),
             )
             return queryset.order_by(
@@ -598,6 +622,80 @@ class MediaManager(models.Manager):
         for tv in tv_list:
             tv_episodes = released_episodes.get(tv.item.media_id, {})
             tv.max_progress = sum(tv_episodes.values()) if tv_episodes else 0
+
+    def _released_episode_dates(self, tv_list):
+        """Map (media_id, source) to {(season, episode): air datetime} if released."""
+        released = {}
+        for event in events.models.Event.objects.filter(
+            item__media_id__in={tv.item.media_id for tv in tv_list},
+            item__media_type=MediaTypes.SEASON.value,
+            item__season_number__gt=0,
+            datetime__lte=timezone.now(),
+            content_number__isnull=False,
+        ).values(
+            "item__media_id",
+            "item__source",
+            "item__season_number",
+            "content_number",
+            "datetime",
+        ):
+            key = (event["item__media_id"], event["item__source"])
+            released.setdefault(key, {})[
+                (event["item__season_number"], event["content_number"])
+            ] = event["datetime"]
+        return released
+
+    def annotate_next_episode(self, tv_list, *, check_vidsrc=False):
+        """Annotate TV shows with the next episode to watch.
+
+        Sets ``next_episode`` (``{"season", "episode", "air_date"}`` of the first
+        released episode after the furthest one watched, or None) and
+        ``newest_unwatched_at`` (air date of the newest such episode, or None).
+        With ``check_vidsrc`` only episodes VidSrc has are counted for
+        ``newest_unwatched_at``; shows whose availability is unknown aren't
+        filtered.
+        """
+        for tv in tv_list:
+            tv.next_episode = None
+            tv.newest_unwatched_at = None
+        released = self._released_episode_dates(tv_list)
+
+        unwatched = {}
+        for tv in tv_list:
+            episodes = released.get((tv.item.media_id, tv.item.source), {})
+            furthest = tv.furthest_watched_episode or (0, 0)
+            ahead = sorted(number for number in episodes if number > furthest)
+            if not ahead:
+                continue
+            unwatched[tv.id] = ahead
+            tv.next_episode = {
+                "season": ahead[0][0],
+                "episode": ahead[0][1],
+                "air_date": episodes[ahead[0]],
+            }
+
+        vidsrc_ranges = {}
+        if check_vidsrc:
+            vidsrc_ranges = app.vidsrc.tv_episode_ranges(
+                tv.item.media_id
+                for tv in tv_list
+                if tv.id in unwatched and tv.item.source == Sources.TMDB.value
+            )
+
+        for tv in tv_list:
+            ahead = unwatched.get(tv.id)
+            if not ahead:
+                continue
+            ranges = vidsrc_ranges.get(tv.item.media_id)
+            if ranges is not None:
+                ahead = [
+                    number
+                    for number in ahead
+                    if app.vidsrc.episode_available(ranges, *number)
+                ]
+            if ahead:
+                episodes = released[(tv.item.media_id, tv.item.source)]
+                tv.newest_unwatched_at = max(episodes[number] for number in ahead)
 
     def fetch_media_for_items(self, media_types, item_ids, user, status_filter=None):
         """Fetch media objects for given items, optionally filtering by status.
@@ -1001,12 +1099,23 @@ class TV(Media):
 
     @property
     def progress(self):
-        """Return the total episodes watched for the TV show."""
+        """Return the number of distinct episodes watched, rewatches not counted."""
         return sum(
-            season.progress
+            season.watched_episodes
             for season in self.seasons.all()
             if season.item.season_number != 0
         )
+
+    @property
+    def furthest_watched_episode(self):
+        """Return the (season, episode) number of the furthest episode watched."""
+        watched = [
+            (season.item.season_number, episode.item.episode_number)
+            for season in self.seasons.all()
+            if season.item.season_number != 0
+            for episode in season.episodes.all()
+        ]
+        return max(watched) if watched else None
 
     @property
     def last_watched(self):
@@ -1520,6 +1629,11 @@ class Season(Media):
             )
 
         return sorted_episodes[0].item.episode_number
+
+    @property
+    def watched_episodes(self):
+        """Return the number of distinct episodes watched, rewatches not counted."""
+        return len({episode.item_id for episode in self.episodes.all()})
 
     @property
     def progressed_at(self):

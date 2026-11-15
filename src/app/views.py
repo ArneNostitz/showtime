@@ -232,13 +232,15 @@ def media_list(request, media_type):
     paginator = Paginator(media_queryset, items_per_page)
     media_page = paginator.get_page(page)
 
-    BasicMedia.objects.annotate_max_progress(
-        media_page.object_list,
-        media_type,
-    )
+    _prepare_list_items(request, media_page.object_list, media_type)
 
-    for media in media_page.object_list:
-        _enrich_stream_url(media)
+    sort_choices = MediaSortChoices.choices
+    if media_type != MediaTypes.TV.value:
+        sort_choices = [
+            choice
+            for choice in sort_choices
+            if choice[0] != MediaSortChoices.NEWEST_UNWATCHED
+        ]
 
     context = {
         "media_type": media_type,
@@ -248,8 +250,10 @@ def media_list(request, media_type):
         "layout_class": ".media-grid" if layout == "grid" else "tbody",
         "current_sort": sort_filter,
         "current_status": status_filter,
-        "sort_choices": MediaSortChoices.choices,
+        "sort_choices": sort_choices,
         "status_choices": MediaStatusChoices.choices,
+        "vsembed_enabled": request.user.vsembed_enabled,
+        "vidsrc_domains": settings.VIDSRC_DOMAINS,
     }
 
     # Handle HTMX requests for partial updates
@@ -269,6 +273,59 @@ def media_list(request, media_type):
     else:
         template_name = "app/media_list.html"
 
+    return render(request, template_name, context)
+
+
+def _prepare_list_items(request, media_list, media_type):
+    """Annotate list entries with progress, stream links and their VidSrc play URL."""
+    BasicMedia.objects.annotate_max_progress(media_list, media_type)
+    if media_type == MediaTypes.TV.value and not all(
+        hasattr(media, "next_episode") for media in media_list
+    ):
+        BasicMedia.objects.annotate_next_episode(media_list)
+
+    for media in media_list:
+        _enrich_stream_url(media)
+        media.play_url = None
+        if not request.user.vsembed_enabled:
+            continue
+        vidsrc_id = _vidsrc_id(media.item.source, media.item.media_id, None)
+        if media_type == MediaTypes.MOVIE.value:
+            media.play_url = _build_vsembed_url(vidsrc_id, media_type)
+        elif media_type == MediaTypes.TV.value and media.next_episode:
+            media.play_url = _build_vsembed_url(
+                vidsrc_id,
+                media_type,
+                media.next_episode["season"],
+                media.next_episode["episode"],
+            )
+
+
+@require_GET
+def media_list_item(request, media_type, instance_id):
+    """Return a single refreshed media list entry (grid card or table row)."""
+    model = apps.get_model(app_label="app", model_name=media_type)
+    queryset = BasicMedia.objects._apply_prefetch_related(
+        model.objects.filter(user=request.user).select_related("item"),
+        media_type,
+    )
+    media = get_object_or_404(queryset, id=instance_id)
+    media.repeats = model.objects.filter(user=request.user, item=media.item).count()
+    _prepare_list_items(request, [media], media_type)
+
+    layout = getattr(request.user, f"{media_type}_layout")
+    if layout == "grid":
+        template_name = "app/components/media_card.html"
+        context = {
+            "media": media,
+            "item": media.item,
+            "title": media.item,
+            "from_grid": True,
+        }
+    else:
+        template_name = "app/components/media_table_row.html"
+        context = {"media": media}
+    context["media_type"] = media_type
     return render(request, template_name, context)
 
 
@@ -854,7 +911,14 @@ def episode_save(request):
 
         logger.info("%s did not exist, it was created successfully.", related_season)
 
-    related_season.watch(episode_number, form.cleaned_data["end_date"])
+    # Play links send skip_if_watched so replaying an episode doesn't log a rewatch.
+    if not (
+        request.POST.get("skip_if_watched")
+        and related_season.episodes.filter(
+            item__episode_number=episode_number,
+        ).exists()
+    ):
+        related_season.watch(episode_number, form.cleaned_data["end_date"])
 
     return helpers.redirect_back(request)
 

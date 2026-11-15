@@ -122,10 +122,11 @@
     </div>
   </div>
 
-  <div class="p-3">
+  <div class="p-3 flex items-center justify-between gap-2">
     <a href="{{ item|media_url }}"
-       class="text-sm font-semibold text-white hover:text-indigo-400 transition duration-300 line-clamp-1"
+       class="text-sm font-semibold text-white hover:text-indigo-400 transition duration-300 line-clamp-1 min-w-0"
        title="{{ title }}">{{ title }}</a>
+    {% include "app/components/list_play_button.html" %}
   </div>
 
   {% if item.media_type == MediaTypes.EPISODE.value %}

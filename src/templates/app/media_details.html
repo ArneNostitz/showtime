@@ -699,7 +699,7 @@
                          rel="noopener"
                          hx-post="{% url 'episode_save' %}?next={{ request.path|urlencode }}"
                          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                         hx-vals='{"media_id": "{{ media.media_id }}", "season_number": "{{ media.season_number }}", "source": "{{ media.source }}", "episode_number": "{{ episode.episode_number }}", "end_date": "{% now "Y-m-d" %}"}'
+                         hx-vals='{"media_id": "{{ media.media_id }}", "season_number": "{{ media.season_number }}", "source": "{{ media.source }}", "episode_number": "{{ episode.episode_number }}", "end_date": "{% now "Y-m-d" %}", "skip_if_watched": "1"}'
                          hx-target="body"
                          data-vidsrc-play
                          class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/30">

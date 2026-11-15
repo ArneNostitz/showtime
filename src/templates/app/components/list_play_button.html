@@ -1,0 +1,26 @@
+{% if media.play_url %}
+  <a href="{{ media.play_url }}"
+     target="_blank"
+     rel="noopener"
+     data-vidsrc-play
+     {% if media.next_episode %}
+       hx-post="{% url 'episode_save' %}?next={% url 'medialist_item' media.item.media_type media.id %}"
+       hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+       hx-vals='{"media_id": "{{ media.item.media_id }}", "season_number": "{{ media.next_episode.season }}", "source": "{{ media.item.source }}", "episode_number": "{{ media.next_episode.episode }}", "end_date": "{% now "Y-m-d" %}", "skip_if_watched": "1"}'
+       hx-target="closest [data-media-item]"
+       hx-swap="innerHTML"
+       title="Play S{{ media.next_episode.season|stringformat:'02d' }}E{{ media.next_episode.episode|stringformat:'02d' }} (marks it as watched)"
+     {% else %}
+       title="Play on VidSrc"
+     {% endif %}
+     class="shrink-0 flex items-center gap-1 px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-full whitespace-nowrap transition-colors">
+    {% include "app/icons/play.svg" with classes="w-3 h-3" %}
+    <span data-vidsrc-label>
+      {% if media.next_episode %}
+        S{{ media.next_episode.season|stringformat:"02d" }}E{{ media.next_episode.episode|stringformat:"02d" }}
+      {% else %}
+        Play
+      {% endif %}
+    </span>
+  </a>
+{% endif %}
