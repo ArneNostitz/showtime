@@ -38,6 +38,7 @@ class MediaSortChoices(models.TextChoices):
     PROGRESS = "progress", "Progress"
     START_DATE = "start_date", "Start Date"
     END_DATE = "end_date", "End Date"
+    NEWEST_UNWATCHED = "newest_unwatched", "Newest Unwatched Episode"
 
 
 class MediaStatusChoices(models.TextChoices):
