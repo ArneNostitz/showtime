@@ -202,10 +202,17 @@ def _render_home_item(request, media_type, instance_id, home_status):
     BasicMedia.objects._annotate_next_event([media])
     BasicMedia.objects.annotate_next_unwatched([media])
     _prepare_home_item(request, media)
+    if home_status == Status.PLANNING.value:
+        home_status = media.status
     return render(
         request,
         "app/components/home_card.html",
-        {"media": media, "home_status": home_status, "refresh": True},
+        {
+            "media": media,
+            "home_status": home_status,
+            "refresh": True,
+            "return_url": reverse("home"),
+        },
     )
 
 

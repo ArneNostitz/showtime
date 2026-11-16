@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from app.models import (
     TV,
+    Anime,
     Episode,
     Item,
     MediaTypes,
@@ -185,6 +186,42 @@ class HomePlayNextTests(TestCase):
         self.assertContains(response, "data-home-item")
         self.assertContains(response, "/embed/tv/100/1/3")
         self.assertContains(response, "2\n")
+
+    def test_refreshed_card_returns_to_home(self):
+        """Tracker actions on a refreshed card return to home, not the endpoint."""
+        item = Item.objects.create(
+            media_id="1",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Anime",
+            image="http://example.com/image.jpg",
+        )
+        anime = Anime.objects.bulk_create(
+            [Anime(item=item, user=self.user, status=Status.IN_PROGRESS.value)],
+        )[0]
+
+        response = self.client.get(
+            reverse("home_item", args=[MediaTypes.ANIME.value, anime.id]),
+        )
+
+        self.assertContains(response, 'title="Add to custom lists"')
+        self.assertContains(response, '"return_url": "/"')
+
+    def test_refreshed_planned_season_shows_progress(self):
+        """A planned season that was started gets its progress controls back."""
+        progress_url = reverse(
+            "progress_edit",
+            args=[MediaTypes.SEASON.value, self.old.id],
+        )
+        url = reverse("home_item", args=[MediaTypes.SEASON.value, self.old.id])
+        params = {"home_status": Status.PLANNING.value}
+
+        response = self.client.get(url, params)
+        self.assertContains(response, progress_url)
+
+        Season.objects.filter(id=self.old.id).update(status=Status.PLANNING.value)
+        response = self.client.get(url, params)
+        self.assertNotContains(response, progress_url)
 
     def test_play_marks_episode_and_returns_card(self):
         """Playing posts the episode and swaps in the refreshed card."""
