@@ -23,6 +23,7 @@ def generate_token():
 class HomeSortChoices(models.TextChoices):
     """Choices for home page sort options."""
 
+    OLDEST_UNWATCHED = "oldest_unwatched", "Oldest Unwatched Episode"
     UPCOMING = "upcoming", "Upcoming"
     RECENT = "recent", "Recent"
     COMPLETION = "completion", "Completion"
@@ -120,7 +121,7 @@ class User(AbstractUser):
 
     home_sort = models.CharField(
         max_length=20,
-        default=HomeSortChoices.UPCOMING,
+        default=HomeSortChoices.OLDEST_UNWATCHED,
         choices=HomeSortChoices,
     )
 
