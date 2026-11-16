@@ -465,6 +465,7 @@ class MediaManager(models.Manager):
             # Annotate with max_progress and next_event
             self.annotate_max_progress(media_list, media_type)
             self._annotate_next_event(media_list)
+            self.annotate_next_unwatched(media_list)
 
             # Sort the media list
             sorted_list = self._sort_home_media(media_list, sort_by)
@@ -512,10 +513,57 @@ class MediaManager(models.Manager):
 
             media.next_event = future_events[0] if future_events else None
 
+    def annotate_next_unwatched(self, media_list):
+        """Annotate media with the first released entry after the furthest watched.
+
+        Sets ``next_unwatched`` (``{"number", "air_date"}`` of that episode or
+        chapter, or None) from the prefetched release events; seasons also get
+        ``next_episode`` (``{"season", "episode", "air_date"}``) for play links.
+        Releases without an air date are never treated as released.
+        """
+        current_time = timezone.now()
+        for media in media_list:
+            media.next_unwatched = None
+            if media.item.media_type == MediaTypes.SEASON.value:
+                media.next_episode = None
+                furthest = max(
+                    (episode.item.episode_number for episode in media.episodes.all()),
+                    default=0,
+                )
+            elif isinstance(media.progress, int):
+                furthest = media.progress
+            else:
+                continue
+
+            released = sorted(
+                (event.content_number, event.datetime)
+                for event in getattr(media.item, "prefetched_events", [])
+                if event.content_number is not None
+                and event.content_number > furthest
+                and event.datetime.year > 1
+                and event.datetime <= current_time
+            )
+            if not released:
+                continue
+            number, air_date = released[0]
+            media.next_unwatched = {"number": number, "air_date": air_date}
+            if media.item.media_type == MediaTypes.SEASON.value:
+                media.next_episode = {
+                    "season": media.item.season_number,
+                    "episode": number,
+                    "air_date": air_date,
+                }
+
     def _sort_home_media(self, media_list, sort_by):
         """Sort home media based on the selected sort criteria."""
         # Define primary sort functions based on sort_by
         primary_sort_functions = {
+            users.models.HomeSortChoices.OLDEST_UNWATCHED: lambda x: (
+                x.next_unwatched is None,
+                x.next_unwatched["air_date"].timestamp() if x.next_unwatched else 0,
+                x.next_event is None,
+                x.next_event.datetime.timestamp() if x.next_event else 0,
+            ),
             users.models.HomeSortChoices.UPCOMING: lambda x: (
                 x.next_event is None,
                 x.next_event.datetime if x.next_event else None,
@@ -1636,6 +1684,11 @@ class Season(Media):
     def watched_episodes(self):
         """Return the number of distinct episodes watched, rewatches not counted."""
         return len({episode.item_id for episode in self.episodes.all()})
+
+    @property
+    def formatted_progress(self):
+        """Return the number of distinct episodes watched."""
+        return str(self.watched_episodes)
 
     @property
     def progressed_at(self):

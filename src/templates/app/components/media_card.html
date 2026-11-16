@@ -129,6 +129,12 @@
     {% include "app/components/list_play_button.html" %}
   </div>
 
+  {% if show_watchlist and not media and item.media_type != MediaTypes.EPISODE.value %}
+    <div class="px-3 pb-3">
+      {% include "app/components/discover_watchlist_button.html" with item=item %}
+    </div>
+  {% endif %}
+
   {% if item.media_type == MediaTypes.EPISODE.value %}
     {% include "app/components/fill_track_episode.html" with request=request media=item episode=item episode_title=title csrf_token=csrf_token TRACK_TIME=TRACK_TIME only %}
   {% else %}

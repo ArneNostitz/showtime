@@ -11,7 +11,6 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import prefetch_related_objects
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -124,9 +123,8 @@ def home(request):
             specific_media_type=media_type_to_load,
         )
         media_list = list_by_type.get(media_type_to_load, [])
-        if media_list.get("items"):
-            for media in media_list["items"]:
-                _enrich_stream_url(media)
+        for media in media_list.get("items", []):
+            _prepare_home_item(request, media)
         context = {
             "media_list": media_list,
             "home_status": status_to_load,
@@ -142,9 +140,8 @@ def home(request):
             items_limit=items_limit,
         )
         for media_list in media_types.values():
-            if media_list.get("items"):
-                for media in media_list["items"]:
-                    _enrich_stream_url(media)
+            for media in media_list.get("items", []):
+                _prepare_home_item(request, media)
         home_sections.append(
             {
                 "key": status,
@@ -161,8 +158,62 @@ def home(request):
         "current_sort": sort_by,
         "sort_choices": HomeSortChoices.choices,
         "items_limit": items_limit,
+        "vsembed_enabled": request.user.vsembed_enabled,
+        "vidsrc_domains": settings.VIDSRC_DOMAINS,
     }
     return render(request, "app/home.html", context)
+
+
+def _set_play_url(request, media):
+    """Set ``play_url``: the movie, or the season's / show's next episode on VidSrc."""
+    media.play_url = None
+    if not request.user.vsembed_enabled:
+        return
+    media_type = media.item.media_type
+    vidsrc_id = _vidsrc_id(media.item.source, media.item.media_id, None)
+    if media_type == MediaTypes.MOVIE.value:
+        media.play_url = _build_vsembed_url(vidsrc_id, media_type)
+    elif media_type in (MediaTypes.TV.value, MediaTypes.SEASON.value) and getattr(
+        media,
+        "next_episode",
+        None,
+    ):
+        media.play_url = _build_vsembed_url(
+            vidsrc_id,
+            MediaTypes.TV.value,
+            media.next_episode["season"],
+            media.next_episode["episode"],
+        )
+
+
+def _prepare_home_item(request, media):
+    """Annotate a home card with its stream link and VidSrc play URL."""
+    _enrich_stream_url(media)
+    _set_play_url(request, media)
+
+
+def _render_home_item(request, media_type, instance_id, home_status):
+    """Render a single, freshly annotated home card."""
+    media = BasicMedia.objects.get_media_prefetch(
+        request.user,
+        media_type,
+        instance_id,
+    )
+    BasicMedia.objects._annotate_next_event([media])
+    BasicMedia.objects.annotate_next_unwatched([media])
+    _prepare_home_item(request, media)
+    return render(
+        request,
+        "app/components/home_card.html",
+        {"media": media, "home_status": home_status, "refresh": True},
+    )
+
+
+@require_GET
+def home_item(request, media_type, instance_id):
+    """Return a single refreshed home card."""
+    home_status = request.GET.get("home_status", Status.IN_PROGRESS.value)
+    return _render_home_item(request, media_type, instance_id, home_status)
 
 
 @require_POST
@@ -181,19 +232,8 @@ def progress_edit(request, media_type, instance_id):
     elif operation == "decrease":
         media.decrease_progress()
 
-    if media_type == MediaTypes.SEASON.value:
-        # clear prefetch cache to get the updated episodes
-        media.refresh_from_db()
-        prefetch_related_objects([media], "episodes")
-
-    context = {
-        "media": media,
-    }
-    return render(
-        request,
-        "app/components/progress_changer.html",
-        context,
-    )
+    home_status = request.POST.get("home_status", Status.IN_PROGRESS.value)
+    return _render_home_item(request, media_type, instance_id, home_status)
 
 
 @require_GET
@@ -283,22 +323,12 @@ def _prepare_list_items(request, media_list, media_type):
         hasattr(media, "next_episode") for media in media_list
     ):
         BasicMedia.objects.annotate_next_episode(media_list)
+    elif media_type == MediaTypes.SEASON.value:
+        BasicMedia.objects.annotate_next_unwatched(media_list)
 
     for media in media_list:
         _enrich_stream_url(media)
-        media.play_url = None
-        if not request.user.vsembed_enabled:
-            continue
-        vidsrc_id = _vidsrc_id(media.item.source, media.item.media_id, None)
-        if media_type == MediaTypes.MOVIE.value:
-            media.play_url = _build_vsembed_url(vidsrc_id, media_type)
-        elif media_type == MediaTypes.TV.value and media.next_episode:
-            media.play_url = _build_vsembed_url(
-                vidsrc_id,
-                media_type,
-                media.next_episode["season"],
-                media.next_episode["episode"],
-            )
+        _set_play_url(request, media)
 
 
 @require_GET
@@ -771,6 +801,34 @@ def media_save(request):
     return helpers.redirect_back(request)
 
 
+def _plan_first_season(tv, tv_metadata):
+    """Put a planned show's first season on the watchlist so it can be played."""
+    seasons = [
+        season
+        for season in tv_metadata.get("related", {}).get("seasons", [])
+        if season.get("season_number")
+    ]
+    if not seasons:
+        return
+    first = min(seasons, key=lambda season: season["season_number"])
+    season_item, _ = Item.objects.get_or_create(
+        media_id=tv.item.media_id,
+        source=tv.item.source,
+        media_type=MediaTypes.SEASON.value,
+        season_number=first["season_number"],
+        defaults={
+            "title": tv.item.title,
+            "image": first.get("image") or tv.item.image,
+        },
+    )
+    Season(
+        item=season_item,
+        user=tv.user,
+        related_tv=tv,
+        status=config.Status.PLANNING.value,
+    ).save()
+
+
 @require_POST
 def media_save_planning(request):
     """Quick-add media to the planning/watchlist with a single click."""
@@ -803,11 +861,14 @@ def media_save_planning(request):
         # lock the user row so concurrent quick-adds can't both pass the check
         get_user_model().objects.select_for_update().filter(pk=request.user.pk).first()
         if not model.objects.filter(item=item, user=request.user).exists():
-            model(
+            instance = model(
                 item=item,
                 user=request.user,
                 status=config.Status.PLANNING.value,
-            ).save()
+            )
+            instance.save()
+            if media_type == MediaTypes.TV.value:
+                _plan_first_season(instance, metadata)
 
     if request.headers.get("HX-Request") and request.POST.get("inline"):
         return render(request, "app/components/discover_added.html")
